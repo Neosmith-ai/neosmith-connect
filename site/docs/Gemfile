@@ -5,3 +5,9 @@ gem "github-pages", group: :jekyll_plugins
 
 # Just-the-Docs theme via remote_theme (configured in _config.yml)
 gem "jekyll-remote-theme"
+
+# rexml — Jekyll 3.x (pinned by github-pages) requires it but doesn't
+# declare it as a dependency. It was a default gem in Ruby < 3.1 but was
+# removed from the default set in 3.1+. Without this, Jekyll 3.6.2 fails
+# with: cannot load such file -- rexml/parsers/baseparser
+gem "rexml"
