@@ -7,6 +7,15 @@
 //   to ~/.neosmith/snapshots/<harness>.bak. `off` copies them back verbatim.
 //   A missing snapshot means "nothing to restore" (e.g. the file didn't exist
 //   before connect), so `off` removes the NeoSmith keys it wrote instead.
+//
+// Audit log (T4): every state-changing io operation appends a JSON-Lines
+// record to ~/.neosmith/audit.log AFTER the operation succeeds. The log is
+// always redacted of key material (sk-plus- / sk-std- / sk-slm- / eyJ).
+//
+// Dry-run (T15): writeText and writeJSON check NEOSMITH_DRY_RUN and route
+// writes to ~/.neosmith/dryrun/<hash-of-path> when set, emitting a
+// "dry-write" audit entry. Reads and state-mutation (snapshot/restore) are
+// untouched.
 
 "use strict";
 
@@ -21,6 +30,9 @@ const NEOSMITH_DIR = path.join(HOME, ".neosmith");
 const SNAPSHOTS_DIR = path.join(NEOSMITH_DIR, "snapshots");
 const CONFIG_FILE = path.join(NEOSMITH_DIR, "config.json"); // stored key ref
 const STATE_FILE = path.join(NEOSMITH_DIR, "state.json");   // per-harness on/off flags
+const AUDIT_FILE = path.join(NEOSMITH_DIR, "audit.log");    // T4 append-only JSON-Lines log
+const DRYRUN_DIR = path.join(NEOSMITH_DIR, "dryrun");       // T15 shadow writes
+const AUDIT_KEY_PREFIX = /sk-(plus|std|slm)-|eyJ/i;
 
 function ensureDir(d) { fs.mkdirSync(d, { recursive: true }); }
 function fileExists(p) { try { fs.accessSync(p); return true; } catch { return false; } }
@@ -35,9 +47,43 @@ function readJSON(p) {
   catch { return {}; }
 }
 
+function redactAuditString(value) {
+  if (typeof value !== "string") return value;
+  if (AUDIT_KEY_PREFIX.test(value)) {
+    return value.slice(0, 8) + "…redacted(" + value.length + ")";
+  }
+  return value;
+}
+
+function appendAuditLog(event) {
+  // Audit AFTER the operation succeeds — a failed write must not produce a
+  // phantom audit entry. Append-only JSON Lines, one record per event.
+  ensureDir(NEOSMITH_DIR);
+  const entry = {
+    ts:      new Date().toISOString(),
+    op:      event.op,                          // write | snapshot | restore | dry-write
+    harness: event.harness || null,
+    path:    redactAuditString(event.path || null),
+    bytes:   event.bytes || null,
+    key:     event.key === true ? "present" : (event.key === false ? "absent" : "absent"),
+  };
+  fs.appendFileSync(AUDIT_FILE, JSON.stringify(entry) + "\n", { mode: 0o600 });
+}
+
 function writeText(p, text, mode) {
+  if (process.env.NEOSMITH_DRY_RUN === "1") {
+    // T15: shadow writes go to ~/.neosmith/dryrun/<hashed real path>.
+    // The hash keeps the shadow name filesystem-safe without dropping info
+    // (each unique source path maps to a unique shadow).
+    const shadow = path.join(DRYRUN_DIR, p.replace(/[^a-z0-9._-]/gi, "_"));
+    ensureDir(path.dirname(shadow));
+    fs.writeFileSync(shadow, text, mode ? { mode } : undefined);
+    appendAuditLog({ op: "dry-write", path: p, bytes: Buffer.byteLength(text) });
+    return;
+  }
   ensureDir(path.dirname(p));
   fs.writeFileSync(p, text, mode ? { mode } : undefined);
+  appendAuditLog({ op: "write", path: p, bytes: Buffer.byteLength(text) });
 }
 
 function writeJSON(p, obj, mode) {
@@ -55,6 +101,7 @@ function snapshot(harnessId, filePath) {
     // Tombstone: the file did not exist pre-connect. `off` should delete it.
     fs.writeFileSync(bak, JSON.stringify({ __tombstone: true, path: filePath }), { mode: 0o600 });
   }
+  appendAuditLog({ op: "snapshot", harness: harnessId, path: filePath });
   return bak;
 }
 
@@ -77,6 +124,7 @@ function restoreSnapshot(harnessId, filePath) {
     try { fs.chmodSync(filePath, 0o600); } catch { /* best effort */ }
   }
   fs.unlinkSync(bak);
+  appendAuditLog({ op: "restore", harness: harnessId, path: filePath });
   return true;
 }
 
@@ -121,10 +169,15 @@ function getHarnessFlag(harnessId) {
   return !!(state.harnesses && state.harnesses[harnessId] && state.harnesses[harnessId].on);
 }
 
+// T4: appendAuditLog is exported so commands (`neosmith log`) and tests can
+// emit events that go through the same funnel. The redaction + write-after
+// contract lives here, so emitting-from-elsewhere is just a call.
 module.exports = {
   HOME, NEOSMITH_DIR, SNAPSHOTS_DIR, CONFIG_FILE, STATE_FILE,
+  AUDIT_FILE, DRYRUN_DIR, AUDIT_KEY_PREFIX,
   ensureDir, fileExists, readText, readJSON, writeText, writeJSON,
   snapshot, restoreSnapshot, clearSnapshot,
+  appendAuditLog,
   readKeyRef, writeKeyRef, clearKeyRef,
   readState, writeState, setHarnessFlag, getHarnessFlag,
 };

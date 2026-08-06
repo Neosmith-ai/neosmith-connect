@@ -13,13 +13,15 @@ A single-glance view of what works where. ✅ = supported and documented · ⚠�
 
 ## Agents × Endpoint
 
+<!-- BEGIN manifest:agents-endpoint -->
 | Agent | Format | Endpoint | Guide |
 |---|---|---|---|
 | **Claude Code** | Anthropic | `router.neosmith.ai` | [agents/claude-code.md](agents/claude-code.md) |
-| **OpenAI Codex** | OpenAI Responses | `router.neosmith.ai/v1` | [agents/codex.md](agents/codex.md) |
-| **Cline** | OpenAI | `router.neosmith.ai/v1` | [agents/cline.md](agents/cline.md) |
+| **Codex** | OpenAI Responses | `router.neosmith.ai/v1` | [agents/codex.md](agents/codex.md) |
 | **Continue** | OpenAI | `router.neosmith.ai/v1` | [agents/continue.md](agents/continue.md) |
-| **JetBrains AI Assistant** | OpenAI | `router.neosmith.ai/v1` | [agents/jetbrains-ai.md](agents/jetbrains-ai.md) |
+| **Cline** | OpenAI | `router.neosmith.ai/v1` | [agents/cline.md](agents/cline.md) |
+| **JetBrains AI** | OpenAI | `router.neosmith.ai/v1` | [agents/jetbrains-ai.md](agents/jetbrains-ai.md) |
+<!-- END manifest:agents-endpoint -->
 
 ## Agents × IDEs
 

@@ -52,13 +52,15 @@ That's it. Open a new Claude Code session — your next prompt routes through Ne
 
 ### AI Coding Agents
 
+<!-- BEGIN manifest:agents -->
 | Agent | Guide | Format | Endpoint |
 |---|---|---|---|
 | **Claude Code** | [agents/claude-code.md](agents/claude-code.md) | Anthropic | `router.neosmith.ai` |
-| **Codex (OpenAI)** | [agents/codex.md](agents/codex.md) | OpenAI Responses | `router.neosmith.ai/v1` |
-| **Cline** (VS Code/JetBrains ext) | [agents/cline.md](agents/cline.md) | OpenAI | `router.neosmith.ai/v1` |
-| **Continue** (VS Code/JetBrains ext) | [agents/continue.md](agents/continue.md) | OpenAI | `router.neosmith.ai/v1` |
-| **JetBrains AI Assistant** | [agents/jetbrains-ai.md](agents/jetbrains-ai.md) | OpenAI | `router.neosmith.ai/v1` |
+| **Codex** | [agents/codex.md](agents/codex.md) | OpenAI Responses | `router.neosmith.ai/v1` |
+| **Continue** | [agents/continue.md](agents/continue.md) | OpenAI | `router.neosmith.ai/v1` |
+| **Cline** | [agents/cline.md](agents/cline.md) | OpenAI | `router.neosmith.ai/v1` |
+| **JetBrains AI** | [agents/jetbrains-ai.md](agents/jetbrains-ai.md) | OpenAI | `router.neosmith.ai/v1` |
+<!-- END manifest:agents -->
 
 ### Platform Setup (Operating System)
 

@@ -1,0 +1,75 @@
+# Pages deploy — replaces the repo Settings → Pages → /docs on main
+# configuration with an actions/deploy-pages workflow. Source path is
+# site/docs/, which feeds Jekyll → _site → GitHub Pages artifact.
+#
+# Prerequisite: the repo's "Build source" Pages setting must be flipped
+# from "Branch: /docs on main" to "GitHub Actions" (one-time, in repo
+# Settings → Pages). Until that's flipped, builds succeed locally but
+# Pages serves the legacy /docs/ directory.
+
+name: pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Two concurrent runs against main can race the Pages deploy; let the
+# second one queue.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Verify that the manifest-driven docs generator is up-to-date with
+      # what's actually committed. Drift here means the manifest changed
+      # but generate-docs.js wasn't re-run; we fail before building.
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - name: Verify manifest-driven docs match the manifest
+        # generate-docs.js maintains site/README.md "AI Coding Agents" and
+        # site/COMPATIBILITY.md "Agents × Endpoint" tables — drift here would
+        # mean a harness was added to harnesses.json but the generator wasn't
+        # re-run.
+        run: node scripts/generate-docs.js --check
+      - name: Report Jekyll mirror drift (informational only)
+        # The mirror at site/docs/ has substantial hand-edited content beyond
+        # what an automated re-generation can reproduce. Drift here is reported
+        # but does not fail the build — see scripts/sync-docs-mirror.js for
+        # the rationale. A future enhancement will produce side-by-side
+        # `.next` files for hand merging.
+        run: node scripts/sync-docs-mirror.js || true
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+          working-directory: site
+
+      - name: Build Jekyll site
+        working-directory: site
+        run: bundle exec jekyll build --destination ../_site
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

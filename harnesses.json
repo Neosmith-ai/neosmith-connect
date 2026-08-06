@@ -9,5 +9,86 @@
     "lite": "neosmith.intelligent-lite"
   },
   "releaseChannel": "stable",
-  "harnesses": []
+  "harnesses": [
+    {
+      "id": "claude",
+      "name": "Claude Code",
+      "module": "./lib/harnesses/claude.js",
+      "writable": true,
+      "configFile": "~/.claude/settings.json",
+      "wire": "anthropic-messages",
+      "defaultModel": "pro",
+      "keyMode": "literal-anthropic-token",
+      "idempotency": "warn-noop",
+      "registryOrder": 1,
+      "addedIn": "0.2.0",
+      "docPage": "agents/claude-code.md",
+      "shortLabel": "Claude Code"
+    },
+    {
+      "id": "codex",
+      "name": "Codex",
+      "module": "./lib/harnesses/codex.js",
+      "writable": true,
+      "configFile": "~/.codex/config.toml",
+      "wire": "openai-responses",
+      "defaultModel": "pro",
+      "keyMode": "env-key-ref",
+      "idempotency": "snapshot-always",
+      "registryOrder": 2,
+      "addedIn": "0.2.0",
+      "docPage": "agents/codex.md",
+      "shortLabel": "Codex"
+    },
+    {
+      "id": "continue",
+      "name": "Continue",
+      "module": "./lib/harnesses/continue.js",
+      "writable": true,
+      "configFile": "~/.continue/config.yaml",
+      "wire": "openai-completions",
+      "defaultModel": "pro",
+      "keyMode": "literal-openai-key",
+      "idempotency": "snapshot-always",
+      "registryOrder": 3,
+      "addedIn": "0.2.0",
+      "extras": { "autocomplete": true },
+      "docPage": "agents/continue.md",
+      "shortLabel": "Continue"
+    },
+    {
+      "id": "cline",
+      "name": "Cline",
+      "module": "./lib/harnesses/cline.js",
+      "writable": false,
+      "configFile": null,
+      "wire": "openai-completions",
+      "defaultModel": "pro",
+      "keyMode": "ui-driven",
+      "registryOrder": 4,
+      "addedIn": "0.2.0",
+      "docPage": "agents/cline.md",
+      "shortLabel": "Cline"
+    },
+    {
+      "id": "jetbrains",
+      "name": "JetBrains AI",
+      "module": "./lib/harnesses/jetbrains.js",
+      "writable": false,
+      "configFile": null,
+      "wire": "openai-completions",
+      "defaultModel": "pro",
+      "keyMode": "ui-driven",
+      "registryOrder": 5,
+      "addedIn": "0.2.0",
+      "perFeatureModels": {
+        "chat": "pro",
+        "inline": "lite",
+        "commit": "lite",
+        "test": "basic"
+      },
+      "docPage": "agents/jetbrains-ai.md",
+      "shortLabel": "JetBrains AI"
+    }
+  ]
 }

@@ -45,7 +45,7 @@ async function main() {
   }
 
   // `<harness> on|off|status` — harness is the first word.
-  if (harness.ids().includes(first)) {
+  if (harness.idsSorted().includes(first)) {
     const sub = (args.shift() || "").toLowerCase();
     if (sub === "on") return commands.on.run([first, ...args]);
     if (sub === "off") return commands.off.run([first, ...args]);
