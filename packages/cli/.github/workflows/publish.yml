@@ -1,0 +1,40 @@
+name: publish
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write  # npm provenance
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+      - name: Sanity check — tag matches package.json version
+        run: |
+          PKG_VER=$(node -p "require('./package.json').version")
+          TAG_VER="${GITHUB_REF_NAME#v}"
+          if [ "$PKG_VER" != "$TAG_VER" ]; then
+            echo "::error::package.json version ($PKG_VER) != tag ($TAG_VER)"
+            exit 1
+          fi
+      - name: Install deps (smol-toml, yaml — needed by codex/continue `on`)
+        run: npm install --omit=dev --no-fund --no-audit
+      - name: Smoke test — syntax-check all modules
+        run: |
+          for f in bin/neosmith.js lib/*.js lib/harnesses/*.js lib/commands/*.js; do
+            node --check "$f"
+          done
+      - name: Smoke test — CLI loads + help renders
+        run: node bin/neosmith.js help
+      - name: Publish
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

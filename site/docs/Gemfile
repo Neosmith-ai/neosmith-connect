@@ -1,0 +1,7 @@
+source "https://rubygems.org"
+
+# GitHub Pages — uses the github-pages gem which pins compatible versions.
+gem "github-pages", group: :jekyll_plugins
+
+# Just-the-Docs theme via remote_theme (configured in _config.yml)
+gem "jekyll-remote-theme"

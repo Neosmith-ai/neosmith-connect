@@ -1,0 +1,13 @@
+{
+  "router": {
+    "baseUrl": "https://router.neosmith.ai",
+    "openaiBaseUrl": "https://router.neosmith.ai/v1"
+  },
+  "models": {
+    "pro": "neosmith.intelligent-pro",
+    "basic": "neosmith.intelligent-basic",
+    "lite": "neosmith.intelligent-lite"
+  },
+  "releaseChannel": "stable",
+  "harnesses": []
+}

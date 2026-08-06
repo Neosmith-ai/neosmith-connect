@@ -1,0 +1,18 @@
+{
+  "name": "neosmith-connect",
+  "private": true,
+  "version": "0.1.0-monorepo-scaffold",
+  "description": "NeoSmith monorepo — CLI (packages/cli) and developer-facing guide (site/), driven by a single harnesses.json manifest.",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "scaffold": "node tools/scaffold-monorepo.js",
+    "generate-docs": "node scripts/generate-docs.js",
+    "sync-docs": "node scripts/sync-docs-mirror.js",
+    "test": "node --test packages/cli/scripts/contract/**/*.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

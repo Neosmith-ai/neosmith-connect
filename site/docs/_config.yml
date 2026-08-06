@@ -1,0 +1,28 @@
+title: NeoSmith Developer Guide
+description: Connect your IDE and AI coding agent to NeoSmith in under 5 minutes.
+remote_theme: just-the-docs/just-the-docs
+
+# Pages serves from /docs on main
+# (set in repo Settings → Pages, build source = /docs)
+
+color_scheme: light
+search_enabled: true
+
+# Pretty URLs (no .html) so in-content cross-links like
+# ../agents/claude-code resolve correctly.
+permalink: pretty
+
+# Header / external links
+aux_links_new_tab: true
+
+nav_external_links:
+  - title: contact-us@neosmith.ai
+    url: mailto:contact-us@neosmith.ai
+
+# Exclude source-of-truth duplicates / internal files from the build
+exclude:
+  - CONTRIBUTING.md
+  - "*.local.md"
+
+plugins:
+  - jekyll-remote-theme

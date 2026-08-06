@@ -1,0 +1,22 @@
+# Node / npm
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Sandbox artifacts produced by the contract test suite
+packages/cli/.sandbox/
+
+# Scaffolder bookkeeping (re-stamped per scaffold run)
+SCAFFOLD_SOURCES.json
+
+# Jekyll build artifact
+_site/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Per-OS quirks
+*.swp
