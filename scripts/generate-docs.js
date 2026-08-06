@@ -57,7 +57,12 @@ function replaceMarkerBlock(text, blockId, body) {
       `Marker pair for ${blockId} not found in target. Add <!-- BEGIN manifest:${blockId} --> and <!-- END manifest:${blockId} --> surrounding the rewriteable block.`,
     );
   }
-  return text.slice(0, startIdx) + begin + "\n" + body + "\n" + end + text.slice(endIdx + end.length);
+  // Detect the file's line ending and use it for the replacement, so the
+  // --check mode doesn't report false drift on Windows (CRLF) vs Unix (LF).
+  // The body (table rows joined with \n) is also normalized to match.
+  const eol = text.includes("\r\n") ? "\r\n" : "\n";
+  const bodyNorm = body.replace(/\r?\n/g, eol);
+  return text.slice(0, startIdx) + begin + eol + bodyNorm + eol + end + text.slice(endIdx + end.length);
 }
 
 function generateAgentsTable(manifest) {

@@ -54,11 +54,11 @@ jobs:
         with:
           ruby-version: "3.3"
           bundler-cache: true
-          working-directory: site
+          working-directory: site/docs
 
       - name: Build Jekyll site
-        working-directory: site
-        run: bundle exec jekyll build --destination ../_site
+        working-directory: site/docs
+        run: bundle exec jekyll build --destination ../../_site
 
       - uses: actions/upload-pages-artifact@v3
         with:
