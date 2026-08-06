@@ -52,7 +52,9 @@ jobs:
 
       - uses: ruby/setup-ruby@v1
         with:
-          ruby-version: "3.3"
+          # Ruby 3.1 — the github-pages gem pins Jekyll 3.x which is
+          # incompatible with Ruby 3.2+. GitHub Pages itself runs 3.1.
+          ruby-version: "3.1"
           bundler-cache: true
           working-directory: site/docs
 
