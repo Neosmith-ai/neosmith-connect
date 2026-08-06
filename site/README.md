@@ -29,13 +29,35 @@ You need a NeoSmith API key (`sk-plus-*`, `sk-slm-*`, or `sk-std-*` — or a Cog
 | `https://router.neosmith.ai` | **Anthropic-format** (`/v1/messages`) | Claude Code |
 | `https://router.neosmith.ai/v1` | **OpenAI-format** (`/v1/chat/completions`, `/v1/responses`) | Cline, Continue, JetBrains AI, Cursor, Codex |
 
-### Fastest path — Claude Code (any OS)
+### Fastest path — install the CLI, then connect Claude Code
+
+**macOS / Linux / WSL2:**
 
 ```bash
-npx @neosmithai/cli init sk-plus-yourname-xxxxxx
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/Neosmith-ai/cli/main/install.sh)"
 ```
 
-That's it. Open a new Claude Code session — your next prompt routes through NeoSmith. (Omit the key to be prompted interactively: `npx @neosmithai/cli init`.)
+**Windows, native PowerShell:**
+
+```powershell
+irm https://raw.githubusercontent.com/Neosmith-ai/cli/main/install.ps1 | iex
+```
+
+Open a new shell, then:
+
+```bash
+neosmith login sk-plus-yourname-xxxxxx
+neosmith claude on
+```
+
+That's it. Open a new Claude Code session — your next prompt routes through NeoSmith.
+
+> **Power-user shortcut (assumes Node 18+ already installed):**
+> ```bash
+> npx @neosmithai/cli init sk-plus-yourname-xxxxxx
+> ```
+> This is equivalent to `login` + `claude on` in one step. Omit the key to be
+> prompted interactively: `npx @neosmithai/cli init`.
 
 ---
 

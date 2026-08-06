@@ -100,11 +100,22 @@ function resolveModelPub(flag) {
 }
 
 function get(id) { return load()[id]; }
-function list() { return load(); }
+function list() { return Object.values(load()); }
+
+function modelsPub() {
+  load();
+  return { ...MANIFEST.models };
+}
 
 module.exports = {
   ROUTER_URL, OPENAI_BASE_URL,
   load, get, list, ids: () => Object.keys(load()), idsSorted,
+  // Back-compat: pre-monorepo callers read `harness.MODELS.{pro,basic,lite}`.
+  // Now sourced from harnesses.json — but the JS shape is identical.
+  MODELS: new Proxy({}, {
+    get(_t, prop) { load(); return MANIFEST.models[prop]; },
+    has(_t, prop) { load(); return prop in MANIFEST.models; },
+  }),
   resolveModel: resolveModelPub,
   // Exposed for tests + scripts that need to read the manifest without
   // re-implementing the resolution rules.

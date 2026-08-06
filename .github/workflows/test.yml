@@ -1,0 +1,54 @@
+# Contract test suite + cross-OS CI matrix (T8 + T16).
+#
+# Runs `node --test` against packages/cli/scripts/contract/*.test.js on the
+# three GitHub-hosted runners. Node 18 (the engines minimum) and Node 20 (LTS)
+# are both exercised per matrix cell — that's 3 OS × 2 Node = 6 jobs.
+#
+# Known gap (T16): WSL2 is not covered by GitHub-hosted runners; it requires a
+# self-hosted runner with nested virtualization. Tracked as a follow-up.
+
+name: test
+
+on:
+  push:
+    branches: [main, feature/neosmith-dev-setup]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:   [ubuntu-latest, macos-latest, windows-latest]
+        node: ["18", "20"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Install cli deps (smol-toml, yaml — needed by codex/continue on)
+        working-directory: packages/cli
+        run: npm install --omit=dev --no-fund --no-audit
+
+      - name: Syntax-check every lib module
+        working-directory: packages/cli
+        run: |
+          for f in bin/neosmith.js lib/*.js lib/harnesses/*.js lib/commands/*.js scripts/contract/*.js; do
+            node --check "$f"
+          done
+        shell: bash
+
+      - name: Contract test suite
+        working-directory: packages/cli
+        # node --test in Node 18+ globs *.test.js under the given path; Node 24
+        # requires an explicit list. List explicitly for portability.
+        run: node --test scripts/contract/io.audit.test.js scripts/contract/harness.registry.test.js scripts/contract/claude.test.js scripts/contract/codex.test.js scripts/contract/continue.test.js scripts/contract/ui.harnesses.test.js
+
+      - name: Verify manifest-driven docs match the manifest
+        run: node scripts/generate-docs.js --check

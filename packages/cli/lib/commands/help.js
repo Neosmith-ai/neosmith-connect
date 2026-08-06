@@ -22,6 +22,9 @@ function top() {
   ui.log("  " + ui.c("cyan", "neosmith <harness> status") + "      Show one harness's state");
   ui.log("  " + ui.c("cyan", "neosmith status") + "                Show all harnesses + stored key");
   ui.log("  " + ui.c("cyan", "neosmith verify") + "                Hit /whoami with the stored key");
+  ui.log("  " + ui.c("cyan", "neosmith doctor") + "               Per-harness live protocol check + audit-log integrity");
+  ui.log("  " + ui.c("cyan", "neosmith setup") + "                Detect installed tools, wire selected, run doctor");
+  ui.log("  " + ui.c("cyan", "neosmith reset [--all]") + "         Disconnect every harness (clears key; --keep-audit to keep log)");
   ui.log("  " + ui.c("cyan", "neosmith uninstall") + "             Disconnect all + remove ~/.neosmith");
   ui.log("  " + ui.c("cyan", "neosmith help [harness]") + "        This message, or per-harness help");
   ui.log("");
@@ -32,6 +35,7 @@ function top() {
   ui.log("  --model <sku>     neosmith.intelligent-pro (default) | -basic | -lite");
   ui.log("  --autocomplete    (continue only) also route inline completions via -lite");
   ui.log("  --key <key>       use this key instead of the stored one");
+  ui.log("  --dry-run         (global) print what would be written without touching disk");
   ui.log("");
   ui.log(ui.c("dim", "No NeoSmith account yet? Email contact-us@neosmith.ai for a trial key."));
   ui.log(ui.c("dim", "Docs: https://github.com/Neosmith-ai/developer-guide · Status: https://github.com/Neosmith-ai/issues"));

@@ -31,12 +31,32 @@ const commands = {
   off: require("../lib/commands/off"),
   status: require("../lib/commands/status"),
   verify: require("../lib/commands/verify"),
+  doctor: require("../lib/commands/doctor"),
+  setup: require("../lib/commands/setup"),
+  reset: require("../lib/commands/reset"),
   uninstall: require("../lib/commands/uninstall"),
   help: require("../lib/commands/help"),
 };
 
 async function main() {
-  const args = process.argv.slice(2);
+  // T15: --dry-run is a global flag. Intercept BEFORE harness dispatch so the
+  // env var is set when io.writeText runs, and strip it from argv so the rest
+  // of the dispatcher sees clean positional args.
+  // Accept --dry-run, --dry-run=true, --dry-run=false. NEOSMITH_DRY_RUN env
+  // is also honored (set by the test suite and CI).
+  const rawArgv = process.argv.slice(2);
+  const cleaned = [];
+  let dry = process.env.NEOSMITH_DRY_RUN === "1";
+  for (let i = 0; i < rawArgv.length; i++) {
+    const a = rawArgv[i];
+    if (a === "--dry-run") { dry = true; continue; }
+    if (a === "--dry-run=true" || a === "--dry-run=1") { dry = true; continue; }
+    if (a === "--dry-run=false" || a === "--dry-run=0") { dry = false; continue; }
+    cleaned.push(a);
+  }
+  process.env.NEOSMITH_DRY_RUN = dry ? "1" : "";
+
+  const args = cleaned;
   const first = (args.shift() || "").toLowerCase();
 
   // Global flags / help
@@ -61,6 +81,9 @@ async function main() {
   switch (first) {
     case "login":   return commands.login.run(args);
     case "verify":  return commands.verify.run(args);
+    case "doctor":  return commands.doctor.run(args);
+    case "setup":   return commands.setup.run(args);
+    case "reset":   return commands.reset.run(args);
     case "status":  return commands.status.run(args);
     case "uninstall": return commands.uninstall.run(args);
     case "help":    return commands.help.run(args);
