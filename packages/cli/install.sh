@@ -6,13 +6,18 @@
 # Or from a local checkout:
 #   bash install.sh
 #
-# Clones the CLI to ~/.neosmith/cli, installs the launcher into ~/.local/bin,
-# and adds it to your shell PATH. Requires Node.js 18+. Does NOT sign you in
-# or touch harness settings — that's `neosmith login` + `neosmith <harness> on`.
+# Downloads the CLI tarball to ~/.neosmith/cli, installs the launcher into
+# ~/.local/bin, and adds it to your shell PATH. Requires Node.js 18+ and
+# `tar` (built into macOS, Linux, and Windows 10+). Does NOT require git.
+# Does NOT sign you in or touch harness settings — that's `neosmith login`
+# + `neosmith <harness> on`.
 set -euo pipefail
 
 # ── defaults ─────────────────────────────────────────────────────────────
-DEFAULT_SOURCE="https://github.com/Neosmith-ai/cli.git"
+# Tarball URL (GitHub codeload). Override with NEOSMITH_SOURCE to point at a
+# fork or a specific ref — must be a .tar.gz that extracts to a top-level
+# directory (GitHub's codeload tarballs do this as <repo>-<ref>/).
+DEFAULT_SOURCE="https://codeload.github.com/Neosmith-ai/cli/tar.gz/refs/heads/main"
 SOURCE="${NEOSMITH_SOURCE:-${DEFAULT_SOURCE}}"
 MIN_NODE_MAJOR=18
 INSTALL_NOTES=()
@@ -96,22 +101,41 @@ ensure_node_runtime() {
 }
 
 # ── 2. durable source ────────────────────────────────────────────────────
+# Download the CLI as a tarball (no git prereq) and extract to ~/.neosmith/cli.
+# GitHub codeload tarballs extract to a top-level <repo>-<ref>/ directory; we
+# rename that to the install_dir. Re-running is a re-download (idempotent
+# upgrade) — we wipe first to avoid stale files from a prior version.
 ensure_durable_source() {
   local install_dir="${HOME}/.neosmith/cli"
+  local staging_dir="${HOME}/.neosmith/cli-download"
   if [[ -n "${CLI}" && -f "${CLI}" ]]; then
     # Running from a local checkout — use it in place.
     return 0
   fi
 
   step "Downloading NeoSmith CLI…"
-  if [[ -d "${install_dir}" ]]; then
-    # Idempotent upgrade: pull instead of re-clone.
-    git -C "${install_dir}" pull --quiet --ff-only >/dev/null 2>&1 || \
-      rm -rf "${install_dir}"
+  rm -rf "${staging_dir}"
+  mkdir -p "${staging_dir}"
+  local tarball="${staging_dir}/cli.tar.gz"
+  if ! curl -fsSL "${SOURCE}" -o "${tarball}"; then
+    red "Failed to download ${SOURCE}. Check network access and re-run."
+    exit 1
   fi
-  if [[ ! -d "${install_dir}" ]]; then
-    git clone --quiet --depth 1 "${SOURCE}" "${install_dir}"
+  # Extract; GitHub tarballs contain a single top-level dir like "cli-main".
+  if ! tar -xzf "${tarball}" -C "${staging_dir}"; then
+    red "Failed to extract tarball. \`tar\` is required (built into macOS, Linux, Win10+)."
+    exit 1
   fi
+  local extracted
+  extracted="$(find "${staging_dir}" -mindepth 1 -maxdepth 1 -type d | head -1)"
+  if [[ -z "${extracted}" ]]; then
+    red "Tarball extracted but no top-level directory was found."
+    exit 1
+  fi
+  # Move the extracted dir into place (wipe any prior install first).
+  rm -rf "${install_dir}"
+  mv "${extracted}" "${install_dir}"
+  rm -rf "${staging_dir}"
   CLI="${install_dir}/bin/neosmith.js"
 }
 

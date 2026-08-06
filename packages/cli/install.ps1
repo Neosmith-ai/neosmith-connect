@@ -9,14 +9,16 @@
 #
 # Mirrors install.sh's six sections:
 #   1. ensure_node_runtime    — winget install OpenJS.NodeJS.LTS or fall back
-#   2. ensure_durable_source  — git pull --ff-only || rm -rf && git clone
+#   2. ensure_durable_source  — Invoke-WebRequest zip + Expand-Archive (no git)
 #   3. ensure_dependencies    — npm install --omit=dev
 #   4. install_cli_launcher   — write neosmith.cmd under %USERPROFILE%\.neosmith\bin\
 #   5. add_bin_dir_to_path    — [Environment]::SetEnvironmentVariable('Path', …, 'User')
 #   6. smoke test + banner
 #
-# Idempotency: re-running does not duplicate PATH entries and does not clone
-# again (git pull --ff-only is the upgrade path).
+# Prerequisites: PowerShell 5.1+ (for Invoke-WebRequest + Expand-Archive),
+# Node.js 18+ (bootstrapped via winget if missing). Does NOT require git.
+# Idempotency: re-running does not duplicate PATH entries; the CLI is
+# re-downloaded and replaces the prior install (the upgrade path).
 
 $ErrorActionPreference = 'Stop'
 
@@ -24,7 +26,10 @@ $MinMajor = 18
 $BinDir   = Join-Path $env:USERPROFILE '.neosmith\bin'
 $CliDir   = Join-Path $env:USERPROFILE '.neosmith\cli'
 $Launcher = Join-Path $BinDir 'neosmith.cmd'
-$Source   = 'https://github.com/Neosmith-ai/cli.git'
+# GitHub codeload zip — extracts to a top-level <repo>-<ref>/ directory.
+# Using .zip (not .tar.gz) so Expand-Archive works on PowerShell 5.1 without
+# needing the tar.exe that only ships with Windows 10+.
+$Source   = 'https://codeload.github.com/Neosmith-ai/cli/zip/refs/heads/main'
 
 # AllSigned-aware preamble. If the user's execution policy is AllSigned, ask
 # them to prepend `Set-ExecutionPolicy -Scope Process Bypass`; do not change
@@ -63,22 +68,44 @@ function Install-Node {
 }
 
 function Install-CLI {
-  if (Test-Path $CliDir) {
-    & git -C $CliDir pull --quiet --ff-only 2>$null
-    if ($LASTEXITCODE -ne 0) {
-      # Non-ff pull — likely the user was working in the clone and committed
-      # something. Wipe and re-clone.
-      Remove-Item -Recurse -Force $CliDir
-    }
+  # Download the CLI as a zip (no git prereq) and extract to ~/.neosmith/cli.
+  # GitHub codeload zips extract to a top-level <repo>-<ref>/ directory; we
+  # rename that to $CliDir. Re-running re-downloads and replaces (the upgrade
+  # path) — we wipe first to avoid stale files from a prior version.
+  $staging = Join-Path $env:USERPROFILE '.neosmith\cli-download'
+  $zip     = Join-Path $staging 'cli.zip'
+
+  Write-Host "  Downloading NeoSmith CLI…" -ForegroundColor White
+  Remove-Item -Recurse -Force $staging -ErrorAction SilentlyContinue
+  New-Item -ItemType Directory -Force -Path $staging | Out-Null
+
+  try {
+    Invoke-WebRequest -Uri $Source -OutFile $zip -UseBasicParsing
+  } catch {
+    Write-Host "Download failed: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "Check network access to github.com and re-run." -ForegroundColor Red
+    exit 1
   }
-  if (-not (Test-Path $CliDir)) {
-    & git clone --quiet --depth 1 $Source $CliDir
-    if ($LASTEXITCODE -ne 0) {
-      Write-Host "git clone failed (exit $LASTEXITCODE)." -ForegroundColor Red
-      Write-Host "Check network access to github.com and re-run." -ForegroundColor Red
-      exit 1
-    }
+
+  try {
+    Expand-Archive -Path $zip -DestinationPath $staging -Force
+  } catch {
+    Write-Host "Extract failed: $($_.Exception.Message)" -ForegroundColor Red
+    exit 1
   }
+
+  # Find the single top-level directory GitHub produced (e.g. "cli-main").
+  $extracted = Get-ChildItem -Path $staging -Directory | Select-Object -First 1
+  if (-not $extracted) {
+    Write-Host "Zip extracted but no top-level directory was found." -ForegroundColor Red
+    exit 1
+  }
+
+  # Move into place (wipe any prior install first).
+  if (Test-Path $CliDir) { Remove-Item -Recurse -Force $CliDir }
+  Move-Item $extracted.FullName $CliDir
+  Remove-Item -Recurse -Force $staging -ErrorAction SilentlyContinue
+
   Push-Location $CliDir
   try {
     & npm install --omit=dev --no-fund --no-audit
