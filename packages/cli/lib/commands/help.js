@@ -29,7 +29,7 @@ function top() {
   ui.log("  " + ui.c("cyan", "neosmith help [harness]") + "        This message, or per-harness help");
   ui.log("");
   ui.log(ui.c("bold", "Harnesses"));
-  ui.log("  claude · codex · continue · cline · jetbrains");
+  ui.log("  " + harness.idsSorted().join(" · "));
   ui.log("");
   ui.log(ui.c("bold", "Options for `on`"));
   ui.log("  --model <sku>     neosmith.intelligent-pro (default) | -basic | -lite");

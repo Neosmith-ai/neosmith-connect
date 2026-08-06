@@ -89,6 +89,53 @@
       },
       "docPage": "agents/jetbrains-ai.md",
       "shortLabel": "JetBrains AI"
+    },
+    {
+      "id": "copilot",
+      "name": "Copilot Chat",
+      "module": "./lib/harnesses/copilot.js",
+      "writable": true,
+      "configFile": "vscode://globalStorage/github.copilot-chat/chatLanguageModels.json",
+      "wire": "openai-completions",
+      "defaultModel": "pro",
+      "keyMode": "ui-keychain",
+      "idempotency": "warn-noop",
+      "registryOrder": 6,
+      "addedIn": "0.3.0",
+      "docPage": "agents/copilot.md",
+      "shortLabel": "Copilot Chat",
+      "notes": "API key stored in VS Code OS-keychain SecretStorage; CLI registers model entries only."
+    },
+    {
+      "id": "zed",
+      "name": "Zed",
+      "module": "./lib/harnesses/zed.js",
+      "writable": true,
+      "configFile": "~/.config/zed/settings.json",
+      "wire": "openai-completions",
+      "defaultModel": "pro",
+      "keyMode": "literal-openai-key",
+      "idempotency": "warn-noop",
+      "registryOrder": 7,
+      "addedIn": "0.3.0",
+      "docPage": "agents/zed.md",
+      "shortLabel": "Zed"
+    },
+    {
+      "id": "cursor",
+      "name": "Cursor",
+      "module": "./lib/harnesses/cursor.js",
+      "writable": true,
+      "configFile": "vscode-fork://Cursor/User/settings.json",
+      "wire": "openai-completions",
+      "defaultModel": "pro",
+      "keyMode": "literal-openai-key",
+      "idempotency": "warn-noop",
+      "registryOrder": 8,
+      "addedIn": "0.3.0",
+      "docPage": "ides/cursor.md",
+      "shortLabel": "Cursor",
+      "notes": "Verified 2026-08-06 against a real Cursor install: BYOK via cursor.models.openai.{baseUrl,apiKey} + cursor.models.customModels in VS Code settings.json."
     }
   ]
 }

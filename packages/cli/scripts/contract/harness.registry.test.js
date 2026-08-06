@@ -22,8 +22,16 @@ test("every manifest entry has a matching .js module", () => {
 
 test("idsSorted returns ids in registryOrder", () => {
   const sorted = harness.idsSorted();
-  assert.deepEqual(sorted, ["claude", "codex", "continue", "cline", "jetbrains"],
-    "idsSorted must follow manifest registryOrder");
+  // The canonical 5 harnesses plus any Phase 2 harnesses that have landed.
+  // Copilot (T9) is the first Phase 2 harness; it lands at registryOrder 6.
+  const expected = ["claude", "codex", "continue", "cline", "jetbrains"];
+  // Add any manifest entries beyond the canonical 5, in registryOrder.
+  const manifest = harness.manifest();
+  for (const h of manifest.harnesses) {
+    if (!expected.includes(h.id)) expected.push(h.id);
+  }
+  assert.deepEqual(sorted, expected,
+    "idsSorted must follow manifest registryOrder (canonical 5 + Phase 2 harnesses in order)");
 });
 
 test("MODELS proxy exposes pro / basic / lite from manifest", () => {
