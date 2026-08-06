@@ -11,3 +11,7 @@ gem "jekyll-remote-theme"
 # removed from the default set in 3.1+. Without this, Jekyll 3.6.2 fails
 # with: cannot load such file -- rexml/parsers/baseparser
 gem "rexml"
+
+# jekyll-include-cache — required by the just-the-docs theme's
+# {% include_cached %} tags. Not bundled with the github-pages gem.
+gem "jekyll-include-cache", group: :jekyll_plugins
