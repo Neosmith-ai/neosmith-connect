@@ -6,7 +6,7 @@
 // `status`/`off` know it's connected. `off` clears the flag and reminds the
 // user to switch Cline back in the UI.
 //
-// Values per neosmith-developer-guide/agents/cline.md.
+// Values per site/agents/cline.md.
 
 "use strict";
 

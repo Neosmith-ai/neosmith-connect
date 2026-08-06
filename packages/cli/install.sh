@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # NeoSmith CLI installer — curl-pipe-bash, fireconnect-style.
 #
-#   sh -c "$(curl -fsSL https://raw.githubusercontent.com/Neosmith-ai/cli/main/install.sh)"
+#   sh -c "$(curl -fsSL https://raw.githubusercontent.com/Neosmith-ai/neosmith-connect/main/packages/cli/install.sh)"
 #
 # Or from a local checkout:
 #   bash install.sh
@@ -17,7 +17,7 @@ set -euo pipefail
 # Tarball URL (GitHub codeload). Override with NEOSMITH_SOURCE to point at a
 # fork or a specific ref — must be a .tar.gz that extracts to a top-level
 # directory (GitHub's codeload tarballs do this as <repo>-<ref>/).
-DEFAULT_SOURCE="https://codeload.github.com/Neosmith-ai/cli/tar.gz/refs/heads/main"
+DEFAULT_SOURCE="https://codeload.github.com/Neosmith-ai/neosmith-connect/tar.gz/refs/heads/main"
 SOURCE="${NEOSMITH_SOURCE:-${DEFAULT_SOURCE}}"
 MIN_NODE_MAJOR=18
 INSTALL_NOTES=()
@@ -102,8 +102,8 @@ ensure_node_runtime() {
 
 # ── 2. durable source ────────────────────────────────────────────────────
 # Download the CLI as a tarball (no git prereq) and extract to ~/.neosmith/cli.
-# GitHub codeload tarballs extract to a top-level <repo>-<ref>/ directory; we
-# rename that to the install_dir. Re-running is a re-download (idempotent
+# The monorepo tarball extracts to a top-level <repo>-<ref>/ directory; we
+# pull packages/cli/ out of it into the install_dir. Re-running is a re-download (idempotent
 # upgrade) — we wipe first to avoid stale files from a prior version.
 ensure_durable_source() {
   local install_dir="${HOME}/.neosmith/cli"
@@ -121,7 +121,8 @@ ensure_durable_source() {
     red "Failed to download ${SOURCE}. Check network access and re-run."
     exit 1
   fi
-  # Extract; GitHub tarballs contain a single top-level dir like "cli-main".
+  # Extract; the monorepo tarball contains a top-level dir like
+  # "neosmith-connect-main/" with the CLI under packages/cli/.
   if ! tar -xzf "${tarball}" -C "${staging_dir}"; then
     red "Failed to extract tarball. \`tar\` is required (built into macOS, Linux, Win10+)."
     exit 1
@@ -132,9 +133,14 @@ ensure_durable_source() {
     red "Tarball extracted but no top-level directory was found."
     exit 1
   fi
-  # Move the extracted dir into place (wipe any prior install first).
+  # The CLI lives at packages/cli/ inside the monorepo archive.
+  local cli_src="${extracted}/packages/cli"
+  if [[ ! -d "${cli_src}" ]]; then
+    red "Tarball extracted but packages/cli/ was not found inside."
+    exit 1
+  fi
   rm -rf "${install_dir}"
-  mv "${extracted}" "${install_dir}"
+  mv "${cli_src}" "${install_dir}"
   rm -rf "${staging_dir}"
   CLI="${install_dir}/bin/neosmith.js"
 }

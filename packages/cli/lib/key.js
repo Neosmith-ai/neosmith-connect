@@ -1,4 +1,4 @@
-// Key validation + storage. NeoSmith keys (per neosmith-developer-guide and
+// Key validation + storage. NeoSmith keys (per the developer guide and
 // the ground-truth memory):
 //   sk-plus-*  (Pro / Opus-tier, default)
 //   sk-std-*   (Basic / Sonnet-tier)

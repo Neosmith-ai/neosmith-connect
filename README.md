@@ -6,15 +6,15 @@ Monorepo for NeoSmith's CLI and developer-facing guide. A single
 - `packages/cli/` — the `@neosmithai/cli` Node CLI that wires IDEs and AI
   coding agents to NeoSmith's routing layer.
 - `site/` — the Jekyll-based developer guide served at
-  <https://neosmith-ai.github.io/developer-guide/>.
+  <https://neosmith-ai.github.io/neosmith-connect/>.
 
 ## Layout
 
 ```
 neosmith-connect/
 ├── harnesses.json                 # single source of truth for all supported harnesses
-├── packages/cli/                  # @neosmithai/cli source (copy of Neosmith-ai/cli)
-├── site/                          # developer-guide source (copy of Neosmith-ai/developer-guide)
+├── packages/cli/                  # @neosmithai/cli source (the CLI package)
+├── site/                          # developer guide (Jekyll docs site)
 │   ├── README.md                  # root guide
 │   ├── COMPATIBILITY.md
 │   ├── ides/  agents/  platforms/  reference/
@@ -46,13 +46,13 @@ npm run scaffold                    # re-stamp from the source repos (deletes ev
 - macOS / Linux / WSL2:
 
   ```bash
-  sh -c "$(curl -fsSL https://raw.githubusercontent.com/Neosmith-ai/cli/main/install.sh)"
+  sh -c "$(curl -fsSL https://raw.githubusercontent.com/Neosmith-ai/neosmith-connect/main/packages/cli/install.sh)"
   ```
 
 - Windows, native PowerShell:
 
   ```powershell
-  irm https://raw.githubusercontent.com/Neosmith-ai/cli/main/install.ps1 | iex
+  irm https://raw.githubusercontent.com/Neosmith-ai/neosmith-connect/main/packages/cli/install.ps1 | iex
   ```
 
 ## Build brief

@@ -2,10 +2,10 @@
 #
 # Source URL (per the build brief Section 2, the install URL stays on raw
 # GitHub until a specific trigger requires a redirect):
-#   https://raw.githubusercontent.com/Neosmith-ai/cli/main/install.ps1
+#   https://raw.githubusercontent.com/Neosmith-ai/neosmith-connect/main/packages/cli/install.ps1
 #
 # One-liner from a fresh PowerShell session:
-#   irm https://raw.githubusercontent.com/Neosmith-ai/cli/main/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/Neosmith-ai/neosmith-connect/main/packages/cli/install.ps1 | iex
 #
 # Mirrors install.sh's six sections:
 #   1. ensure_node_runtime    — winget install OpenJS.NodeJS.LTS or fall back
@@ -29,7 +29,7 @@ $Launcher = Join-Path $BinDir 'neosmith.cmd'
 # GitHub codeload zip — extracts to a top-level <repo>-<ref>/ directory.
 # Using .zip (not .tar.gz) so Expand-Archive works on PowerShell 5.1 without
 # needing the tar.exe that only ships with Windows 10+.
-$Source   = 'https://codeload.github.com/Neosmith-ai/cli/zip/refs/heads/main'
+$Source   = 'https://codeload.github.com/Neosmith-ai/neosmith-connect/zip/refs/heads/main'
 
 # AllSigned-aware preamble. If the user's execution policy is AllSigned, ask
 # them to prepend `Set-ExecutionPolicy -Scope Process Bypass`; do not change
@@ -38,7 +38,7 @@ $policy = Get-ExecutionPolicy -Scope CurrentUser -ErrorAction SilentlyContinue
 if ($policy -eq 'AllSigned') {
   Write-Host "Detected AllSigned execution policy. Re-run with this prefix:" -ForegroundColor Yellow
   Write-Host ("  Set-ExecutionPolicy -Scope Process Bypass; " +
-              "irm https://raw.githubusercontent.com/Neosmith-ai/cli/main/install.ps1 | iex") -ForegroundColor Yellow
+              "irm https://raw.githubusercontent.com/Neosmith-ai/neosmith-connect/main/packages/cli/install.ps1 | iex") -ForegroundColor Yellow
   exit 1
 }
 
@@ -94,16 +94,21 @@ function Install-CLI {
     exit 1
   }
 
-  # Find the single top-level directory GitHub produced (e.g. "cli-main").
+  # The monorepo zip has packages/cli/ inside the top-level dir.
   $extracted = Get-ChildItem -Path $staging -Directory | Select-Object -First 1
   if (-not $extracted) {
     Write-Host "Zip extracted but no top-level directory was found." -ForegroundColor Red
     exit 1
   }
+  $cliSrc = Join-Path $extracted.FullName "packages\cli"
+  if (-not (Test-Path $cliSrc)) {
+    Write-Host "Zip extracted but packages\cli\ was not found inside." -ForegroundColor Red
+    exit 1
+  }
 
-  # Move into place (wipe any prior install first).
+  # Move packages/cli into place (wipe any prior install first).
   if (Test-Path $CliDir) { Remove-Item -Recurse -Force $CliDir }
-  Move-Item $extracted.FullName $CliDir
+  Move-Item $cliSrc $CliDir
   Remove-Item -Recurse -Force $staging -ErrorAction SilentlyContinue
 
   Push-Location $CliDir

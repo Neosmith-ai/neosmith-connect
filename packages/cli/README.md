@@ -9,7 +9,7 @@ NeoSmith routes cheap traffic to a distilled SLM and escalates to Claude Opus on
 **1. Install**
 
 ```bash
-sh -c "$(curl -fsSL https://raw.githubusercontent.com/Neosmith-ai/cli/main/install.sh)"
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/Neosmith-ai/neosmith-connect/main/packages/cli/install.sh)"
 ```
 
 Or, without the curl-pipe installer (Node.js 18+ already on your machine):
@@ -55,13 +55,13 @@ Run `neosmith help` or `neosmith <harness> help` for every option.
 **Windows:** run from Git Bash. Piping `curl | bash` in PowerShell corrupts line endings (`set: pipefail\r: invalid option name`); keep the pipe inside bash:
 
 ```bash
-bash -c "curl -fsSL https://raw.githubusercontent.com/Neosmith-ai/cli/main/install.sh | bash"
+bash -c "curl -fsSL https://raw.githubusercontent.com/Neosmith-ai/neosmith-connect/main/packages/cli/install.sh | bash"
 ```
 
 **From an SSH checkout:**
 
 ```bash
-mkdir -p ~/.neosmith && git clone git@github.com:Neosmith-ai/cli.git ~/.neosmith/cli && bash ~/.neosmith/cli/install.sh
+mkdir -p ~/.neosmith && git clone git@github.com:Neosmith-ai/neosmith-connect.git ~/.neosmith/connect && bash ~/.neosmith/connect/packages/cli/install.sh
 ```
 
 ## Supported harnesses
@@ -208,7 +208,7 @@ Enable streaming + tool/function calling. `off` clears the on-flag and reminds y
 
 ```bash
 # Upgrade — re-run the installer (pulls latest, idempotent):
-sh -c "$(curl -fsSL https://raw.githubusercontent.com/Neosmith-ai/cli/main/install.sh)"
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/Neosmith-ai/neosmith-connect/main/packages/cli/install.sh)"
 
 # Or, if installed via npx, just use the latest:
 npx @neosmithai/cli@latest login
@@ -223,4 +223,4 @@ Manage your key, rotate it, and see cap usage at **https://router.neosmith.ai/me
 
 ## License
 
-MIT. Source: https://github.com/Neosmith-ai/cli · Docs: https://github.com/Neosmith-ai/developer-guide
+MIT. Source: https://github.com/Neosmith-ai/neosmith-connect · Docs: https://neosmith-ai.github.io/neosmith-connect/

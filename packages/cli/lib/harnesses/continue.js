@@ -1,7 +1,7 @@
 // Continue — file-writable.
 //
 // Writes ~/.continue/config.yaml (0600). OpenAI-compatible provider on
-// https://router.neosmith.ai/v1. Per neosmith-developer-guide/agents/continue.md:
+// https://router.neosmith.ai/v1. Per site/agents/continue.md:
 //
 //   models:
 //     - name: NeoSmith

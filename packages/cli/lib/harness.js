@@ -17,15 +17,17 @@
 const fs = require("fs");
 const path = require("path");
 
-// NeoSmith defaults, sourced from neosmith-developer-guide/reference/endpoints.md.
-// Override via NEOSMITH_BASE_URL env (kept for parity with the pre-monorepo CLI).
+// NeoSmith defaults. The router URL and model SKU ladder live in
+// harnesses.json (the manifest); these constants are kept as fallbacks
+// for the env-override case (NEOSMITH_BASE_URL).
 const ROUTER_URL = process.env.NEOSMITH_BASE_URL || "https://router.neosmith.ai";
 const OPENAI_BASE_URL = `${ROUTER_URL}/v1`;
 
-// Manifest resolution. NEOSMITH_MANIFEST overrides for testing; the default
-// resolves to the monorepo root's harnesses.json (and falls back to MONOREPO_ROOT)
-// when the package is symlinked or vendored elsewhere.
-const DEFAULT_MANIFEST_PATH = path.resolve(__dirname, "..", "..", "..", "harnesses.json");
+// Manifest resolution. NEOSMITH_MANIFEST overrides for testing. The default
+// resolves to harnesses.json in the package root (packages/cli/harnesses.json)
+// — one level up from lib/. This keeps the npm-published package self-contained:
+// `npm install -g @neosmithai/cli` ships the manifest inside the package.
+const DEFAULT_MANIFEST_PATH = path.resolve(__dirname, "..", "harnesses.json");
 
 function readManifest() {
   const manifestPath = process.env.NEOSMITH_MANIFEST || DEFAULT_MANIFEST_PATH;

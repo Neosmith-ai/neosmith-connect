@@ -1,6 +1,6 @@
 {
   "name": "@neosmithai/cli",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Route AI coding agents (Claude Code, Codex, Continue, Cline, JetBrains AI) through the NeoSmith router — same experience, ~60% lower inference cost.",
   "keywords": [
     "claude",
@@ -15,12 +15,13 @@
     "llm",
     "neosmith"
   ],
-  "homepage": "https://neosmith.ai",
+  "homepage": "https://neosmith-ai.github.io/neosmith-connect/",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Neosmith-ai/cli.git"
+    "url": "https://github.com/Neosmith-ai/neosmith-connect.git",
+    "directory": "packages/cli"
   },
-  "bugs": "https://github.com/Neosmith-ai/issues/issues",
+  "bugs": "https://github.com/Neosmith-ai/neosmith-connect/issues",
   "license": "MIT",
   "author": "NeoSmith AI <contact-us@neosmith.ai>",
   "bin": {
@@ -30,6 +31,7 @@
   "files": [
     "bin/",
     "lib/",
+    "harnesses.json",
     "install.sh",
     "install.ps1",
     "README.md"

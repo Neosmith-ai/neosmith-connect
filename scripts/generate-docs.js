@@ -22,7 +22,7 @@ const fs = require("fs");
 const path = require("path");
 
 const MONOREPO_ROOT = path.resolve(__dirname, "..");
-const MANIFEST_PATH = path.join(MONOREPO_ROOT, "harnesses.json");
+const MANIFEST_PATH = path.join(MONOREPO_ROOT, "packages", "cli", "harnesses.json");
 
 const WIRE_HUMAN = {
   "anthropic-messages":    "Anthropic",

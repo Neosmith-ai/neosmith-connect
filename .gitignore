@@ -17,6 +17,7 @@ _site/
 Thumbs.db
 .vscode/
 .idea/
+.history/
 
 # Per-OS quirks
 *.swp

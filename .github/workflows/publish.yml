@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write  # npm provenance
+      id-token: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -19,22 +19,23 @@ jobs:
           registry-url: "https://registry.npmjs.org"
       - name: Sanity check — tag matches package.json version
         run: |
-          PKG_VER=$(node -p "require('./package.json').version")
+          PKG_VER=$(node -p "require('./packages/cli/package.json').version")
           TAG_VER="${GITHUB_REF_NAME#v}"
           if [ "$PKG_VER" != "$TAG_VER" ]; then
             echo "::error::package.json version ($PKG_VER) != tag ($TAG_VER)"
             exit 1
           fi
-      - name: Install deps (smol-toml, yaml — needed by codex/continue `on`)
+      - name: Install deps
+        working-directory: packages/cli
         run: npm install --omit=dev --no-fund --no-audit
-      - name: Smoke test — syntax-check all modules
-        run: |
-          for f in bin/neosmith.js lib/*.js lib/harnesses/*.js lib/commands/*.js; do
-            node --check "$f"
-          done
+      - name: Contract tests
+        working-directory: packages/cli
+        run: node --test scripts/contract/io.audit.test.js scripts/contract/harness.registry.test.js scripts/contract/claude.test.js scripts/contract/codex.test.js scripts/contract/continue.test.js scripts/contract/ui.harnesses.test.js
       - name: Smoke test — CLI loads + help renders
+        working-directory: packages/cli
         run: node bin/neosmith.js help
       - name: Publish
+        working-directory: packages/cli
         run: npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

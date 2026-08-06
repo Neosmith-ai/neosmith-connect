@@ -1,5 +1,5 @@
 blank_issues_enabled: false
 contact_links:
   - name: Neosmith Developer Guide
-    url: https://neosmith-ai.github.io/developer-guide/
+    url: https://neosmith-ai.github.io/neosmith-connect/
     about: Setup docs, IDE integrations, agent configuration

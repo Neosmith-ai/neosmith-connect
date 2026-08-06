@@ -5,7 +5,7 @@ This guide is published for NeoSmith customers and prospects. Contributions that
 ## Structure
 
 ```
-neosmith-developer-guide/
+neosmith-connect/
 ├── README.md              # Entry point — quick start + navigation
 ├── COMPATIBILITY.md       # At-a-glance matrix
 ├── ides/                  # Per-IDE setup (vscode, jetbrains, cursor, antigravity)

@@ -42,13 +42,13 @@ You need a NeoSmith API key (`sk-plus-*`, `sk-slm-*`, or `sk-std-*` — or a Cog
 **macOS / Linux / WSL2:**
 
 ```bash
-sh -c "$(curl -fsSL https://raw.githubusercontent.com/Neosmith-ai/cli/main/install.sh)"
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/Neosmith-ai/neosmith-connect/main/packages/cli/install.sh)"
 ```
 
 **Windows, native PowerShell:**
 
 ```powershell
-irm https://raw.githubusercontent.com/Neosmith-ai/cli/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/Neosmith-ai/neosmith-connect/main/packages/cli/install.ps1 | iex
 ```
 
 Open a new shell, then:
