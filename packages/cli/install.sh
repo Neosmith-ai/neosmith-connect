@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # NeoSmith CLI installer — curl-pipe-bash, fireconnect-style.
 #
-#   sh -c "$(curl -fsSL https://raw.githubusercontent.com/Neosmith-ai/neosmith-connect/main/packages/cli/install.sh)"
+#   bash -c "$(curl -fsSL https://raw.githubusercontent.com/Neosmith-ai/neosmith-connect/main/packages/cli/install.sh)"
 #
 # Or from a local checkout:
 #   bash install.sh
