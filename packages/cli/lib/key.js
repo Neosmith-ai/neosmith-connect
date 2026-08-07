@@ -1,4 +1,6 @@
-// Key validation + storage. NeoSmith keys (per the developer guide and
+// Key storage. The router is the authority on validity (salted-SHA256
+// fingerprint lookup against api_keys + Cognito JWKS for JWTs); the CLI does
+// NOT gate on prefix shape. NeoSmith issues (per neosmith-developer-guide and
 // the ground-truth memory):
 //   sk-plus-*  (Pro / Opus-tier, default)
 //   sk-std-*   (Basic / Sonnet-tier)
@@ -12,12 +14,6 @@
 const io = require("./io");
 const http = require("./http");
 const ui = require("./ui");
-
-const KEY_RE = /^(sk-(plus|std|slm)-|eyJ)/;
-
-function looksLikeKey(s) {
-  return typeof s === "string" && KEY_RE.test(s);
-}
 
 function describe(s) {
   if (!s) return "none";
@@ -41,7 +37,8 @@ async function resolveKey(explicit) {
   ui.die("No key found. Run `neosmith login <key>` first, or pass --key.");
 }
 
-// login [key]: validate shape, verify against /whoami, store the ref.
+// login [key]: round-trip against /whoami, store the ref. Server is the
+// authoritative validator; the CLI does not gate on prefix shape.
 async function login(explicitKey, opts = {}) {
   let key = explicitKey;
   if (!key) {
@@ -49,11 +46,6 @@ async function login(explicitKey, opts = {}) {
       key = (await ui.prompt("Paste your NeoSmith API key: ")).trim();
     }
     if (!key) ui.die("No key provided. Aborting.");
-  }
-
-  if (!looksLikeKey(key)) {
-    ui.warn(`That doesn't look like a NeoSmith API key (expected sk-plus-*, sk-std-*, sk-slm-*, or a Cognito JWT).`);
-    if (!(await ui.confirm("Proceed anyway?"))) ui.die("Aborted.");
   }
 
   const routerUrl = opts.routerUrl || http.DEFAULT_ROUTER;
@@ -87,4 +79,4 @@ async function login(explicitKey, opts = {}) {
   return { key, identity };
 }
 
-module.exports = { KEY_RE, looksLikeKey, describe, resolveKey, login };
+module.exports = { describe, resolveKey, login };

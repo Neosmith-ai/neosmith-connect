@@ -10,12 +10,14 @@ const io = require("../io");
 const ui = require("../ui");
 
 async function run(args) {
-  // Allow `neosmith verify <key>` or `--key X`
+  // Only `--key X` / `-k X` / `--key=X` passes an explicit key. A bare
+  // positional arg is NOT promoted to the key — the router is the
+  // authority on validity, so sniffing the prefix would be noise. Without
+  // an explicit --key, the stored ref (~/.neosmith/config.json) is used.
   let explicit = null;
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--key" || args[i] === "-k") explicit = args[++i];
     else if (args[i].startsWith("--key=")) explicit = args[i].slice("--key=".length);
-    else if (!explicit && /^(sk-(plus|std|slm)-|eyJ)/.test(args[i])) explicit = args[i];
   }
   const apiKey = explicit || io.readKeyRef();
   if (!apiKey) ui.die("No key found. Run `neosmith login <key>` first, or pass --key.");
