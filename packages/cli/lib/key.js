@@ -1,5 +1,6 @@
 // Key validation + storage. NeoSmith keys (per the developer guide and
 // the ground-truth memory):
+//   sk-maestro-* (Maestro / highest-accuracy agentic)
 //   sk-plus-*  (Pro / Opus-tier, default)
 //   sk-std-*   (Basic / Sonnet-tier)
 //   sk-slm-*   (Lite / SLM-only)
@@ -13,7 +14,7 @@ const io = require("./io");
 const http = require("./http");
 const ui = require("./ui");
 
-const KEY_RE = /^(sk-(plus|std|slm)-|eyJ)/;
+const KEY_RE = /^(sk-(maestro|plus|std|slm)-|eyJ)/;
 
 function looksLikeKey(s) {
   return typeof s === "string" && KEY_RE.test(s);
@@ -21,6 +22,7 @@ function looksLikeKey(s) {
 
 function describe(s) {
   if (!s) return "none";
+  if (/^sk-maestro-/.test(s)) return "sk-maestro-* (Maestro / highest-accuracy agentic)";
   if (/^sk-plus-/.test(s)) return "sk-plus-* (Pro / Opus-tier)";
   if (/^sk-std-/.test(s)) return "sk-std-* (Basic / Sonnet-tier)";
   if (/^sk-slm-/.test(s)) return "sk-slm-* (Lite / SLM-only)";
@@ -35,7 +37,7 @@ async function resolveKey(explicit) {
   const stored = io.readKeyRef();
   if (stored) return stored;
   if (ui.isTTY) {
-    const pasted = (await ui.prompt("Paste your NeoSmith API key (sk-plus-*, sk-std-*, sk-slm-*, or eyJ… JWT): ")).trim();
+    const pasted = (await ui.prompt("Paste your NeoSmith API key (sk-maestro-*, sk-plus-*, sk-std-*, sk-slm-*, or eyJ… JWT): ")).trim();
     if (pasted) return pasted;
   }
   ui.die("No key found. Run `neosmith login <key>` first, or pass --key.");
@@ -52,7 +54,7 @@ async function login(explicitKey, opts = {}) {
   }
 
   if (!looksLikeKey(key)) {
-    ui.warn(`That doesn't look like a NeoSmith API key (expected sk-plus-*, sk-std-*, sk-slm-*, or a Cognito JWT).`);
+    ui.warn(`That doesn't look like a NeoSmith API key (expected sk-maestro-*, sk-plus-*, sk-std-*, sk-slm-*, or a Cognito JWT).`);
     if (!(await ui.confirm("Proceed anyway?"))) ui.die("Aborted.");
   }
 
