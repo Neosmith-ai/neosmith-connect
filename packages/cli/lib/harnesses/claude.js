@@ -19,10 +19,13 @@ const ui = require("../ui");
 const CONFIG = path.join(io.HOME, ".claude", "settings.json");
 
 function hasNeoSmith(s) {
+  // Detection keys on the router URL or the canonical NeoSmith auth-token env
+  // var. We no longer sniff the prefix of ANTHROPIC_API_KEY: the router is
+  // the authority on key validity, and `on` rewrites the entry anyway, so
+  // refusing on shape alone was noise.
   return s && s.env && (
     (typeof s.env.ANTHROPIC_BASE_URL === "string" && s.env.ANTHROPIC_BASE_URL.includes("router.neosmith.ai")) ||
-    (typeof s.env.ANTHROPIC_AUTH_TOKEN === "string") ||
-    (typeof s.env.ANTHROPIC_API_KEY === "string" && /^(sk-(plus|std|slm)-|eyJ)/.test(s.env.ANTHROPIC_API_KEY))
+    (typeof s.env.ANTHROPIC_AUTH_TOKEN === "string")
   );
 }
 
