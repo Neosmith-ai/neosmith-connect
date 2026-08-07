@@ -46,7 +46,7 @@ npm run scaffold                    # re-stamp from the source repos (deletes ev
 - macOS / Linux / WSL2:
 
   ```bash
-  sh -c "$(curl -fsSL https://raw.githubusercontent.com/Neosmith-ai/neosmith-connect/main/packages/cli/install.sh)"
+  bash -c "$(curl -fsSL https://raw.githubusercontent.com/Neosmith-ai/neosmith-connect/main/packages/cli/install.sh)"
   ```
 
 - Windows, native PowerShell:

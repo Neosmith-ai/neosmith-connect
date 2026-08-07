@@ -9,7 +9,7 @@ NeoSmith routes cheap traffic to a distilled SLM and escalates to Claude Opus on
 **1. Install**
 
 ```bash
-sh -c "$(curl -fsSL https://raw.githubusercontent.com/Neosmith-ai/neosmith-connect/main/packages/cli/install.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/Neosmith-ai/neosmith-connect/main/packages/cli/install.sh)"
 ```
 
 Or, without the curl-pipe installer (Node.js 18+ already on your machine):
@@ -208,7 +208,7 @@ Enable streaming + tool/function calling. `off` clears the on-flag and reminds y
 
 ```bash
 # Upgrade — re-run the installer (pulls latest, idempotent):
-sh -c "$(curl -fsSL https://raw.githubusercontent.com/Neosmith-ai/neosmith-connect/main/packages/cli/install.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/Neosmith-ai/neosmith-connect/main/packages/cli/install.sh)"
 
 # Or, if installed via npx, just use the latest:
 npx @neosmithai/cli@latest login

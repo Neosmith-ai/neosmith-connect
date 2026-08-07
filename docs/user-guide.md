@@ -25,7 +25,7 @@ Supported platforms: macOS, Linux, Windows (use **Git Bash** for the installer �
 ### Step 1 — Install the CLI
 
 ```bash
-sh -c "$(curl -fsSL https://raw.githubusercontent.com/Neosmith-ai/neosmith-connect/main/packages/cli/install.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/Neosmith-ai/neosmith-connect/main/packages/cli/install.sh)"
 ```
 
 **What you should see** (≈10 seconds):
