@@ -25,12 +25,12 @@ npx @neosmithai/cli init sk-plus-yourname-xxxxxx
 
 This writes the right env keys into `~/.claude/settings.json` and verifies against `/whoami`. Open a **new** Claude Code session — done.
 
-> **Accepted key formats:** the CLI recognizes `sk-plus-*`, `sk-slm-*`, and `sk-std-*` keys, as well as a Cognito JWT (starts with `eyJ`). If your key doesn't match one of these, it warns and asks you to confirm before proceeding.
+> **Accepted key formats:** NeoSmith issues keys as `sk-plus-*` (Pro / Opus-tier), `sk-slm-*` (Lite / SLM-only), and `sk-std-*` (Basic / Sonnet-tier), plus a Cognito JWT (starts with `eyJ`) for SSO. The CLI does not gate on prefix — whatever value you paste is stored and round-tripped against `/whoami`, which is the server-side source of truth for key validity (a `401` or `403` response means the key wasn't accepted).
 
 > **Interactive mode:** run `npx @neosmithai/cli init` with **no key** and it prompts you to paste one securely instead of putting it in your shell history.
 
 What `init` does, in order:
-1. Validates the key shape (warns if it doesn't look like a NeoSmith key).
+1. Round-trips the key against `https://router.neosmith.ai/whoami` for server-side validation (the router is the authoritative validator — the CLI does not inspect the prefix).
 2. Backs up any existing Claude Code config to `~/.claude/settings.json.neosmith-backup` (so `uninstall` can restore it).
 3. Writes `ANTHROPIC_BASE_URL`, `ANTHROPIC_API_KEY`, and `ANTHROPIC_MODEL` into `~/.claude/settings.json` (file mode `0600` — owner read/write only).
 4. Live-verifies the key against `https://router.neosmith.ai/whoami` and prints your dev slug, org, tier, and 30-day cap usage.
