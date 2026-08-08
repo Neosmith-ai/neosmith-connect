@@ -126,16 +126,21 @@ function main() {
     path.join(out, "harnesses.json"),
     JSON.stringify(
       {
-        router: {
-          baseUrl: "https://router.neosmith.ai",
-          openaiBaseUrl: "https://router.neosmith.ai/v1",
+        defaultEnvironment: "prod",
+        environments: {
+          prod: {
+            label: "production",
+            baseUrl: "https://router.neosmith.ai",
+            openaiBaseUrl: "https://router.neosmith.ai/v1",
+            portalUrl: "https://router.neosmith.ai/me/login",
+            hosts: ["router.neosmith.ai"],
+          },
         },
         models: {
           pro: "neosmith.intelligent-pro",
           basic: "neosmith.intelligent-basic",
           lite: "neosmith.intelligent-lite",
         },
-        releaseChannel: "stable",
         harnesses: [],
       },
       null,

@@ -16,23 +16,14 @@
 
 const fs = require("fs");
 const path = require("path");
+const manifestMod = require("./manifest");
+const envMod = require("./env");
 
-// NeoSmith defaults. The router URL and model SKU ladder live in
-// harnesses.json (the manifest); these constants are kept as fallbacks
-// for the env-override case (NEOSMITH_BASE_URL).
-const ROUTER_URL = process.env.NEOSMITH_BASE_URL || "https://router.neosmith.ai";
-const OPENAI_BASE_URL = `${ROUTER_URL}/v1`;
-
-// Manifest resolution. NEOSMITH_MANIFEST overrides for testing. The default
-// resolves to harnesses.json in the package root (packages/cli/harnesses.json)
-// — one level up from lib/. This keeps the npm-published package self-contained:
-// `npm install -g @neosmithai/cli` ships the manifest inside the package.
-const DEFAULT_MANIFEST_PATH = path.resolve(__dirname, "..", "harnesses.json");
-
+// Manifest resolution lives in lib/manifest.js — extracted so lib/env.js can
+// read harnesses.json without requiring this module (every lib/harnesses/*.js
+// requires ../harness, so harness.js can't be on env.js's require path).
 function readManifest() {
-  const manifestPath = process.env.NEOSMITH_MANIFEST || DEFAULT_MANIFEST_PATH;
-  const raw = fs.readFileSync(manifestPath, "utf8");
-  return { manifestPath, manifest: JSON.parse(raw) };
+  return manifestMod.read();
 }
 
 function resolveModel(flag, models) {
@@ -111,7 +102,28 @@ function modelsPub() {
 }
 
 module.exports = {
-  ROUTER_URL, OPENAI_BASE_URL,
+  // Lazy getters, NOT consts. The router URL must be resolved on first *read*
+  // — after bin/neosmith.js has stripped `--env` from argv — not at require
+  // time, when every command module is loaded before main() has run.
+  //
+  // Every consumer reads these as a property access (`harness.ROUTER_URL`), so
+  // the getters are transparent. Do NOT destructure them
+  // (`const { ROUTER_URL } = require("./harness")`): that captures the value at
+  // import time and silently stops reacting to --env. Pinned by the
+  // `no-eager-router-url` case in scripts/contract/env-flag.test.js.
+  get ROUTER_URL() { return envMod.current().baseUrl; },
+  get OPENAI_BASE_URL() { return envMod.current().openaiBaseUrl; },
+
+  // Environment metadata for reporting and guards.
+  envInfo: () => envMod.current(),
+  envName: () => envMod.current().name,
+  // Which stored-key slot the active environment reads/writes. Differs from
+  // envName only when NEOSMITH_BASE_URL points at an unnamed address.
+  keyEnv: () => envMod.current().keyEnv,
+  // Manifest-bound wrappers so callers never re-thread the manifest.
+  isNeosmithUrl: (url) => envMod.isNeosmithUrl(url, readManifest().manifest),
+  envForUrl: (url) => envMod.envForUrl(url, readManifest().manifest),
+
   load, get, list, ids: () => Object.keys(load()), idsSorted,
   // Back-compat: pre-monorepo callers read `harness.MODELS.{pro,basic,lite}`.
   // Now sourced from harnesses.json — but the JS shape is identical.

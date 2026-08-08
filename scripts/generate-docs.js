@@ -41,6 +41,13 @@ function loadManifest() {
   return JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
 }
 
+// The docs describe the environment users get by default. Named environments
+// replaced the old top-level `router` block; the generated tables are unchanged
+// because ENDPOINT_HUMAN doesn't interpolate these values today.
+function defaultEnv(manifest) {
+  return manifest.environments[manifest.defaultEnvironment];
+}
+
 function manifestHarnessesSorted(manifest) {
   return (manifest.harnesses || [])
     .slice()
@@ -68,7 +75,7 @@ function replaceMarkerBlock(text, blockId, body) {
 function generateAgentsTable(manifest) {
   const rows = manifestHarnessesSorted(manifest).map((h) => {
     const fmt = WIRE_HUMAN[h.wire] || h.wire;
-    const ep = ENDPOINT_HUMAN(h.wire, manifest.router.baseUrl, manifest.router.openaiBaseUrl);
+    const ep = ENDPOINT_HUMAN(h.wire, defaultEnv(manifest).baseUrl, defaultEnv(manifest).openaiBaseUrl);
     const docRel = (h.docPage || `agents/${h.id}.md`).replace(/^\.\//, "");
     const label = h.shortLabel || h.name;
     return `| **${label}** | [${docRel}](${docRel}) | ${fmt} | ${ep} |`;
@@ -79,7 +86,7 @@ function generateAgentsTable(manifest) {
 function generateAgentsEndpointTable(manifest) {
   const rows = manifestHarnessesSorted(manifest).map((h) => {
     const fmt = WIRE_HUMAN[h.wire] || h.wire;
-    const ep = ENDPOINT_HUMAN(h.wire, manifest.router.baseUrl, manifest.router.openaiBaseUrl);
+    const ep = ENDPOINT_HUMAN(h.wire, defaultEnv(manifest).baseUrl, defaultEnv(manifest).openaiBaseUrl);
     const docRel = (h.docPage || `agents/${h.id}.md`).replace(/^\.\//, "");
     const label = h.shortLabel || h.name;
     return `| **${label}** | ${fmt} | ${ep} | [${docRel}](${docRel}) |`;
