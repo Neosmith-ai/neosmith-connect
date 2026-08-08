@@ -6,13 +6,12 @@ NeoSmith routes cheap traffic to a distilled SLM and escalates to Claude Opus on
 
 ## Quick start
 
-**1. Install**
+**1. Install** — use the command for your OS from the root
+[`README.md`](https://github.com/Neosmith-ai/neosmith-connect#install-paths)
+(both the bash and the PowerShell installer are shipped). This README used to
+duplicate the bash path and drift out of sync (see bug #6) — now it just points.
 
-```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/Neosmith-ai/neosmith-connect/main/packages/cli/install.sh)"
-```
-
-Or, without the curl-pipe installer (Node.js 18+ already on your machine):
+Or, if you already have Node 18+ and want to skip the installer:
 
 ```bash
 npx @neosmithai/cli login sk-plus-yourname-xxxxxx
@@ -48,21 +47,18 @@ Run `neosmith help` or `neosmith <harness> help` for every option.
 
 ### Install notes
 
-- Requires **Node.js 18+**. Missing or too old: the installer installs it via Homebrew on macOS, otherwise prints nvm / nodejs.org / NodeSource instructions.
-- Clones the CLI to `~/.neosmith/cli`, installs the launcher into `~/.local/bin`, and adds it to your shell `PATH`.
-- Does **not** sign you in or touch harness settings — that's steps 2 and 3.
+- Requires **Node.js 18+**. The bash installer (macOS/Linux) uses Homebrew if
+  Homebrew is present, otherwise prints `nvm` / `nodejs.org` / `NodeSource`
+  guidance. The PowerShell installer (Windows) bootstraps Node via `winget`
+  when missing.
+- Clones the CLI to `~/.neosmith/cli`; installs a launcher (`~/.local/bin/neosmith`
+  on POSIX, `%USERPROFILE%\.neosmith\bin\neosmith.cmd` on Windows) and adds it
+  to your shell's `PATH` so subsequent shells see `neosmith` immediately.
+- **Does not** sign you in or touch harness settings — those are steps 2 and 3.
+- For Windows-specific PowerShell / `Invoke-WebRequest` pitfalls and `curl.exe`
+  vs `curl` alias gotchas, see [site/platforms/windows-native.md][win].
 
-**Windows:** run from Git Bash. Piping `curl | bash` in PowerShell corrupts line endings (`set: pipefail\r: invalid option name`); keep the pipe inside bash:
-
-```bash
-bash -c "curl -fsSL https://raw.githubusercontent.com/Neosmith-ai/neosmith-connect/main/packages/cli/install.sh | bash"
-```
-
-**From an SSH checkout:**
-
-```bash
-mkdir -p ~/.neosmith && git clone git@github.com:Neosmith-ai/neosmith-connect.git ~/.neosmith/connect && bash ~/.neosmith/connect/packages/cli/install.sh
-```
+[win]: https://github.com/Neosmith-ai/neosmith-connect/blob/main/site/platforms/windows-native.md
 
 ## Supported harnesses
 
@@ -238,10 +234,11 @@ safety nets sit on top:
 ## Upgrade and uninstall
 
 ```bash
-# Upgrade — re-run the installer (pulls latest, idempotent):
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/Neosmith-ai/neosmith-connect/main/packages/cli/install.sh)"
+# Upgrade — re-run the installer for your OS (see root README → Install paths).
+# The installers are idempotent: they re-download a fresh tarball/zip and
+# safely replace the CLI in place (~/.neosmith/cli), preserving your key.
 
-# Or, if installed via npx, just use the latest:
+# Or, if you installed via npx, just bump to latest:
 npx @neosmithai/cli@latest login
 
 # Uninstall — disconnect every harness, remove ~/.neosmith (+ launcher with --all):

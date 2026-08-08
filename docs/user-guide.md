@@ -24,9 +24,10 @@ Supported platforms: macOS, Linux, Windows (use **Git Bash** for the installer �
 
 ### Step 1 — Install the CLI
 
-```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/Neosmith-ai/neosmith-connect/main/packages/cli/install.sh)"
-```
+Install with the command that matches your OS — see the root README's
+[**Install paths**](https://github.com/Neosmith-ai/neosmith-connect#install-paths)
+section. (Those two installers — `install.sh` and `install.ps1` — are the only
+authoritative sources for install commands; this guide doesn't duplicate them.)
 
 **What you should see** (≈10 seconds):
 
@@ -35,7 +36,7 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/Neosmith-ai/neosmith-con
 
   Downloading NeoSmith CLI…
   Installing dependencies…
-  ✓ Installed launcher → /Users/you/.local/bin/neosmith
+  ✓ Installed launcher → /Users/you/.local/bin/neosmith     (or ~/.neosmith/bin on Windows PowerShell)
   ✓ NeoSmith CLI ready
 
   Next steps:
@@ -382,22 +383,16 @@ If `doctor` still doesn't tell you what's wrong, file an issue with the **all th
 
 ## Windows note
 
-The curl-pipe-bash approach doesn't work cleanly in PowerShell because of line-ending issues. Two paths that work:
+If you're on Windows, the root `README.md` lists the native PowerShell installer
+(`irm … | iex`) as the first-path option — that's the simplest. Git Bash and the
+manual git-clone flow there both work too; the rest of this guide is shell-agnostic
+once the CLI is installed.
 
-**Git Bash (recommended):**
-
-```bash
-bash -c "curl -fsSL https://raw.githubusercontent.com/Neosmith-ai/neosmith-connect/main/packages/cli/install.sh | bash"
-```
-
-**From an SSH-style checkout:**
-
-```bash
-mkdir -p ~/.neosmith && git clone https://github.com/Neosmith-ai/neosmith-connect.git ~/.neosmith/connect
-bash ~/.neosmith/connect/packages/cli/install.sh
-```
-
-The installer also writes a `neosmith.cmd` shim alongside the bash launcher so `neosmith` works in `cmd.exe` and PowerShell.
+If your IDE (JetBrains, VS Code on Windows) and agent are both Windows-native,
+see the [Windows Native](site/platforms/windows-native.md) platform guide for the
+PowerShell-specific pitfalls (curl = `Invoke-WebRequest`, env-var launch behavior,
+etc.). If you can use WSL, the [Windows WSL2](site/platforms/windows-wsl.md) guide
+is recommended — most agentic tooling is smoother under Linux.
 
 ---
 
