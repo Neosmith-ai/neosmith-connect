@@ -13,9 +13,15 @@
 const { run } = require("node:test");
 const { spec } = require("node:test/reporters");
 const { Transform } = require("stream");
+const fs = require("fs");
 const path = require("path");
 
-const glob = path.join(__dirname, "contract", "*.test.js");
+// Explicit absolute file list — auto-discovers every *.test.js, excludes
+// helpers (_sandbox.js, _mock_server.js), and is fully portable (glob args to
+// run() are unreliable on Windows and unsupported pre-22).
+const files = fs.readdirSync(path.join(__dirname, "contract"))
+  .filter((f) => f.endsWith(".test.js"))
+  .map((f) => path.join(__dirname, "contract", f));
 
 let pass = 0, fail = 0;
 const counter = new Transform({
@@ -33,4 +39,4 @@ counter.on("finish", () => {
   console.log(`\ncontract suite: ${pass} passed, ${fail} failed`);
   process.exit(fail > 0 ? 1 : 0);
 });
-run({ glob, concurrency: true }).compose(spec()).pipe(counter);
+run({ files, concurrency: true }).compose(spec()).pipe(counter);

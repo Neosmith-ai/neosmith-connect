@@ -48,11 +48,13 @@ function write(p, s) { mkdir(path.dirname(p)); fs.writeFileSync(p, s); }
 // with the spec reporter into both the console and the report file, and count
 // pass/fail from the stream events.
 function runContractSuite(reportPath) {
-  const glob = path.join(CONTRACT_DIR, "*.test.js");
-  log(`\n▶ Running contract suite (node:test run API, glob ${path.relative(PKG, glob)})…`);
+  const files = fs.readdirSync(CONTRACT_DIR)
+    .filter((f) => f.endsWith(".test.js"))
+    .map((f) => path.join(CONTRACT_DIR, f));
+  log(`\n▶ Running contract suite (${files.length} files via node:test run API)…`);
 
   return new Promise((resolve) => {
-    const stream = runTests({ glob, concurrency: true });
+    const stream = runTests({ files, concurrency: true });
     let buf = "";
     // Parse the rendered spec/TAP text: top-level "✔ name"/"✖ name" (and the
     // "not ok" TAP form) mark leaf test results. Counting the rendered lines
