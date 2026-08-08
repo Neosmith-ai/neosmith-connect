@@ -38,8 +38,36 @@ The orchestrating `package.json` here exposes workspace-aware scripts:
 npm run generate-docs -- --check   # verify docs site tables are manifest-driven
 npm run sync-docs     -- --check   # verify Jekyll mirror is in sync
 npm test                            # run the contract test suite
+npm run smoke                       # smoke gate: tests + isolated on/off rehearsal, opens report
 npm run scaffold                    # re-stamp from the source repos (deletes everything first)
 ```
+
+## Testing & the smoke gate
+
+The CLI's correctness gate is `npm run smoke`. It runs **all** contract tests
+(`packages/cli/scripts/contract/*.test.js`, verbose) **and** rehearses a real
+`claude on → status → off` cycle against a throwaway HOME, then drops a
+human-readable report into `packages/cli/.smoke/<timestamp>/` (auto-opened).
+See `packages/cli/README.md` for what each artifact file shows.
+
+**When does it run?**
+
+| Where | Trigger | What runs |
+|---|---|---|
+| **Your machine** | **Manual — you run it** | `npm run smoke` (from root or `packages/cli`) |
+| **Your machine (optional)** | automatic on `git push` | run `npm run install-hook` once → pre-push hook runs `npm run smoke:ci` and blocks the push on failure |
+| **CI (GitHub Actions)** | automatic on every push & PR | `test.yml` runs the contract suite + `npm run smoke:ci` on Linux/macOS/Windows × Node 18/20 |
+
+Local commits do **not** auto-run anything — either run `npm run smoke` before
+pushing, or opt into the pre-push gate once:
+
+```bash
+npm run install-hook    # one-time; sets core.hooksPath to the repo's hooks/ dir
+```
+
+After that, `git push` runs the smoke gate first and blocks on failure
+(`git push --no-verify` overrides a single push; `git config --unset core.hooksPath`
+removes the gate). CI always runs it regardless, so nothing untested reaches `main`.
 
 ## Install paths
 

@@ -98,8 +98,9 @@ neosmith claude on --model neosmith.intelligent-lite    # SLM-only, lowest cost
 | `neosmith.intelligent-pro` | Opus-tier (**default**) | SLM-first, escalates to Claude Opus on hard tasks / verifier-fail |
 | `neosmith.intelligent-basic` | Sonnet-tier | SLM-first with Sonnet fallback; **no Opus** |
 | `neosmith.intelligent-lite` | Haiku/SLM-only | Lowest cost, SLM-only, no frontier escalation |
+| `neosmith.intelligent-maestro` | Highest-accuracy agentic coding | Fable-tier; top-of-ladder agentic lane |
 
-Anthropic-style ids (`claude-opus-4`, `claude-sonnet-4-6`) are also accepted for Claude Code and map to the corresponding tier.
+Anthropic-style ids (`claude-opus-4`, `claude-sonnet-4-6`) are also accepted for Claude Code and map to the corresponding tier. For Claude Code, `on` also writes the branded per-tier ladder (`ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU,FABLE}_MODEL` + `_NAME`/`_DESCRIPTION`) and top-level `model`/`advisorModel` — see [agents/claude-code.md](https://neosmith-ai.github.io/neosmith-connect/docs/agents/claude-code).
 
 ## Claude Code
 
@@ -191,6 +192,36 @@ Enable streaming + tool/function calling. `off` clears the on-flag and reminds y
 | `neosmith uninstall [--all]` | Disconnect all harnesses, remove `~/.neosmith` (+ launcher with `--all`). |
 | `neosmith help [harness]` | Top-level or per-harness help. |
 | `neosmith init <key>` | *(Back-compat)* login + `claude on` in one shot — the original one-liner. |
+
+## Developing: the smoke gate
+
+Before pushing changes to the CLI, run the smoke suite — it runs every contract
+test (verbose, named) **and** rehearses a real `claude on → status → off` cycle
+against a throwaway HOME (never your real config), then drops everything into a
+timestamped folder you can open and read:
+
+```bash
+npm run smoke        # full report + opens .smoke/<timestamp>/
+npm run smoke:ci     # exit-code only, for CI / pre-push hooks
+```
+
+Each run writes `.smoke/<timestamp>/` with `SUMMARY.txt`, the named test list
+(`contract-tests.txt`), the rehearsal console output (`rehearsal.log`), and the
+actual settings files the CLI produced — `cli.settings.wired.json`,
+`editor-wired.*.settings.json` (the injected `claudeCode.*` block), plus
+before/after copies proving your settings are preserved and restored
+byte-for-byte. Nothing outside `.smoke/<timestamp>/home/` is touched.
+
+**When does it run?** Running it yourself is manual (`npm run smoke`). Two
+safety nets sit on top:
+
+- **Optional pre-push hook** — `npm run install-hook` (once) points
+  `core.hooksPath` at the repo's `hooks/` dir; then `git push` runs
+  `npm run smoke:ci` and blocks on failure. Override one push with
+  `git push --no-verify`; remove with `git config --unset core.hooksPath`.
+- **CI** — `.github/workflows/test.yml` runs the contract suite **and**
+  `npm run smoke:ci` on every push/PR, across Linux/macOS/Windows × Node 18/20.
+  So even without the local hook, an untested change can't merge green.
 
 ## Troubleshooting
 

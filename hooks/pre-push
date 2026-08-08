@@ -1,0 +1,12 @@
+#!/bin/sh
+# Repo-tracked pre-push hook — runs the CLI smoke gate before every push.
+# Enabled via `npm run install-hook` (sets core.hooksPath to this directory).
+# Bypass a single push with: git push --no-verify
+
+echo "pre-push: running CLI smoke gate (npm run smoke:ci)…"
+npm run smoke:ci || {
+  echo ""
+  echo "✗ smoke failed — push blocked. Fix locally, or override with --no-verify."
+  exit 1
+}
+exit 0

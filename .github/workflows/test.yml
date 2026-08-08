@@ -39,16 +39,21 @@ jobs:
       - name: Syntax-check every lib module
         working-directory: packages/cli
         run: |
-          for f in bin/neosmith.js lib/*.js lib/harnesses/*.js lib/commands/*.js scripts/contract/*.js; do
+          for f in bin/neosmith.js lib/*.js lib/harnesses/*.js lib/commands/*.js scripts/*.js scripts/contract/*.js; do
             node --check "$f"
           done
         shell: bash
 
       - name: Contract test suite
         working-directory: packages/cli
-        # node --test in Node 18+ globs *.test.js under the given path; Node 24
-        # requires an explicit list. List explicitly for portability.
-        run: node --test scripts/contract/io.audit.test.js scripts/contract/harness.registry.test.js scripts/contract/claude.test.js scripts/contract/codex.test.js scripts/contract/continue.test.js scripts/contract/ui.harnesses.test.js
+        # scripts/run-contract.js runs every scripts/contract/*.test.js via the
+        # node:test run() API and exits non-zero on failure — portable across
+        # Node 18/20/22/24 and all OSes. New test files run automatically.
+        run: node scripts/run-contract.js
+
+      - name: Smoke gate (contract suite + isolated claude on/off rehearsal)
+        working-directory: packages/cli
+        run: npm run smoke:ci
 
       - name: Verify manifest-driven docs match the manifest
         run: node scripts/generate-docs.js --check

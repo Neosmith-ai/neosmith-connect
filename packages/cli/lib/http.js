@@ -78,4 +78,14 @@ async function verifyMessages(routerUrl, apiKey) {
   );
 }
 
-module.exports = { DEFAULT_ROUTER, get, post, whoami, verifyMessages };
+// GET /v1/models with the NeoSmith key. Returns { status, data } where data
+// is the parsed OpenAI-list body ({ object: "list", data: [...] }).
+async function listModels(routerUrl, apiKey) {
+  const base = routerUrl || DEFAULT_ROUTER;
+  const resp = await get(`${base}/v1/models`, { Authorization: `Bearer ${apiKey}` });
+  let data = {};
+  try { data = JSON.parse(resp.body); } catch { data = {}; }
+  return { status: resp.status, data };
+}
+
+module.exports = { DEFAULT_ROUTER, get, post, whoami, verifyMessages, listModels };

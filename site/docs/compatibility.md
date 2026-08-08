@@ -14,7 +14,7 @@ A single-glance view of what works where. ✅ = supported and documented · ⚠�
 |---|:---:|:---:|---|
 | **VS Code** | ✅ | ✅ Cline / Continue / Copilot BYOK | [ides/vscode.md](ides/vscode) |
 | **JetBrains** (all 10) | ✅ Plugin 27310 | ✅ AI Assistant / Cline | [ides/jetbrains.md](ides/jetbrains) |
-| **Cursor** | ✅ | ✅ Native BYOM | [ides/cursor.md](ides/cursor) |
+| **Cursor** | ✅ | ⚠️ Native BYOM (UI-only · needs Cursor Pro/Ultra) | [ides/cursor.md](ides/cursor) |
 | **Google Antigravity** | ✅ | ❌ URL blocked | [ides/antigravity.md](ides/antigravity) |
 
 ## Agents × Endpoint
@@ -53,3 +53,4 @@ A single-glance view of what works where. ✅ = supported and documented · ⚠�
 | `neosmith.intelligent-pro` | Opus-tier (default) | ✅ | General coding, agentic work |
 | `neosmith.intelligent-basic` | Sonnet-tier | ❌ (Sonnet fallback) | Mid-complexity, cost-conscious |
 | `neosmith.intelligent-lite` | SLM-only | ❌ | Autocomplete, commit msgs, low-cost |
+| `neosmith.intelligent-maestro` | Fable-tier | ❌ | Highest-accuracy agentic coding |

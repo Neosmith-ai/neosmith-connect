@@ -6,7 +6,14 @@
   "models": {
     "pro": "neosmith.intelligent-pro",
     "basic": "neosmith.intelligent-basic",
-    "lite": "neosmith.intelligent-lite"
+    "lite": "neosmith.intelligent-lite",
+    "maestro": "neosmith.intelligent-maestro"
+  },
+  "claudeTierMap": {
+    "opus":   { "slot": "OPUS",   "model": "neosmith.intelligent-pro",     "name": "NeoSmith Pro",     "description": "Cost-optimised with Opus escalation" },
+    "sonnet": { "slot": "SONNET", "model": "neosmith.intelligent-basic",   "name": "NeoSmith Basic",   "description": "Cost-optimised with Sonnet ceiling" },
+    "haiku":  { "slot": "HAIKU",  "model": "neosmith.neolite",             "name": "NeoSmith NeoLite", "description": "Sealed budget tier · 512K · cheapest" },
+    "fable":  { "slot": "FABLE",  "model": "neosmith.intelligent-maestro", "name": "NeoSmith Maestro", "description": "Highest-accuracy agentic coding" }
   },
   "releaseChannel": "stable",
   "harnesses": [
@@ -125,17 +132,16 @@
       "id": "cursor",
       "name": "Cursor",
       "module": "./lib/harnesses/cursor.js",
-      "writable": true,
-      "configFile": "vscode-fork://Cursor/User/settings.json",
+      "writable": false,
+      "configFile": null,
       "wire": "openai-completions",
       "defaultModel": "pro",
-      "keyMode": "literal-openai-key",
-      "idempotency": "warn-noop",
+      "keyMode": "ui-driven",
       "registryOrder": 8,
       "addedIn": "0.3.0",
       "docPage": "ides/cursor.md",
       "shortLabel": "Cursor",
-      "notes": "Verified 2026-08-06 against a real Cursor install: BYOK via cursor.models.openai.{baseUrl,apiKey} + cursor.models.customModels in VS Code settings.json."
+      "notes": "Re-verified 2026-08-07 against the installed Cursor build: native BYOK is stored in an encrypted, server-synced store (aiserver.v1 byok/apiKeyCandidates/baseUrlCandidates), NOT settings.json — the string 'cursor.models.' never appears in Cursor's workbench bundle. Configured via Settings → Models UI and requires Cursor Pro/Ultra. CLI prints paste-in values. Scriptable alternative: Claude Code extension (`neosmith claude on`)."
     }
   ]
 }
