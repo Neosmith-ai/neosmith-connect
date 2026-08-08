@@ -13,9 +13,12 @@
 //   wire_api  = "responses"
 //
 // The key is referenced via env_key (Codex reads $OPENAI_API_KEY at runtime),
-// so we also instruct the user to export it. We DO NOT bake the key into the
+// so we also instruct the user to set it. We DO NOT bake the key into the
 // TOML — Codex's contract is env_key indirection. `neosmith login` stores the
-// key in ~/.neosmith/config.json; we print the export line for the shell profile.
+// key in ~/.neosmith/config.json; on() prints platform-correct instructions for
+// persisting the env var (setx on Windows, shell rc on POSIX) plus the
+// full-restart steps for GUI editors. See lib/envsetup.js for why that split
+// matters — a POSIX `export` line is dead copy on Windows outside Git Bash.
 //
 // TOML merge via `smol-toml` (same lib fireconnect uses). If the dependency is
 // somehow missing, we fall back to a regex/string merge and warn.
@@ -27,6 +30,7 @@ const path = require("path");
 const harness = require("../harness");
 const io = require("../io");
 const ui = require("../ui");
+const envsetup = require("../envsetup");
 
 const CONFIG_DIR = path.join(io.HOME, ".codex");
 const CONFIG = path.join(CONFIG_DIR, "config.toml");
@@ -116,9 +120,24 @@ function on(ctx) {
 
   io.writeText(CONFIG, out, 0o600);
   ui.ok(`Wrote ${CONFIG}`);
-  ui.log(ui.c("dim", `Codex reads the key from $OPENAI_API_KEY at runtime. Export it in your shell profile:`));
-  ui.log(`    export OPENAI_API_KEY=${ctx.key}`);
-  ui.log(`    export OPENAI_BASE_URL=${harness.OPENAI_BASE_URL}`);
+
+  // The TOML holds `env_key = "OPENAI_API_KEY"` — a NAME, not the secret. Codex
+  // resolves it from the environment on every launch, so this step is what
+  // actually makes the connection work. Instructions are platform-specific:
+  // printing POSIX `export` on Windows sends the user down a path that fails
+  // in PowerShell, cmd, and VS-Code-launched Codex. See lib/envsetup.js.
+  const vars = [
+    ["OPENAI_API_KEY", ctx.key],
+    ["OPENAI_BASE_URL", harness.OPENAI_BASE_URL],
+  ];
+  ui.log("");
+  ui.log(ui.c("dim", `Codex reads the key from $OPENAI_API_KEY at runtime — the TOML`));
+  ui.log(ui.c("dim", `holds only the variable's name, never the key itself.`));
+  ui.log("");
+  for (const l of envsetup.envSetupLines(vars)) ui.log(ui.c("dim", l));
+  ui.log("");
+  for (const l of envsetup.vscodeRestartLines()) ui.log(ui.c("dim", l));
+
   return { wrote: true, needsEnv: true };
 }
 
@@ -180,7 +199,8 @@ function help() {
   return [
     `Codex — OpenAI Responses API (/v1/responses).`,
     `Wires: ~/.codex/config.toml (merges your existing providers).`,
-    `Key storage: Codex reads $OPENAI_API_KEY at runtime — export it in your shell profile.`,
+    `Key storage: Codex reads $OPENAI_API_KEY at runtime — \`on\` prints the`,
+    `  platform-correct way to persist it (setx on Windows, shell rc on macOS/Linux).`,
     ``,
     `Examples:`,
     `  neosmith codex on`,

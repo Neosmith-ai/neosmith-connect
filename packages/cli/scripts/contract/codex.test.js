@@ -123,3 +123,52 @@ test("codex off strips the NeoSmith block when no pre-connect snapshot exists", 
             afterText.includes("# user comment"),
     "off() fallback must preserve pre-connect user content");
 }));
+
+// ── env instructions ────────────────────────────────────────────────────────
+// codex.on() must TELL the user how to set OPENAI_API_KEY, because the TOML
+// only holds `env_key = "OPENAI_API_KEY"` — without the env var the harness has
+// no credentials at all. The wording is contracted in envsetup.test.js; here we
+// only assert that on() actually routes through it and never prints a POSIX
+// export command on Windows.
+
+function captureOn(ctx) {
+  const orig = console.log;
+  const lines = [];
+  console.log = (...a) => lines.push(a.join(" "));
+  try {
+    const { codex, harness } = loadCodex();
+    codex.on({ model: harness.resolveModel("pro"), ...ctx });
+  } finally {
+    console.log = orig;
+  }
+  // Strip ANSI so assertions match regardless of TTY state.
+  return lines.map((l) => l.replace(/\x1b\[[0-9;]*m/g, ""));
+}
+
+test("codex on prints env instructions containing the key", () => withSandbox(() => {
+  const out = captureOn({ key: "sk-plus-test-aaaaaaaaaaaa" }).join("\n");
+  assert.match(out, /OPENAI_API_KEY/);
+  assert.match(out, /sk-plus-test-aaaaaaaaaaaa/, "the user must be shown the value to set");
+  assert.match(out, /https:\/\/router\.neosmith\.ai\/v1/);
+}));
+
+test("codex on explains that the TOML holds only the variable name", () => withSandbox(() => {
+  const out = captureOn({ key: "sk-plus-test-aaaaaaaaaaaa" }).join("\n");
+  // The whole class of confusion this fixes: "the CLI said it wrote the config,
+  // so why is there no key in it?"
+  assert.match(out, /never the key itself|only the variable's name/i);
+}));
+
+test("codex on tells the user how to fully restart the editor", () => withSandbox(() => {
+  const out = captureOn({ key: "sk-plus-test-aaaaaaaaaaaa" }).join("\n");
+  assert.match(out, /NOT enough/i, "must rule out restarting just the terminal panel");
+  assert.match(out, /code \./, "must warn against relaunching from a stale terminal");
+}));
+
+test("codex on never prints a POSIX export command on Windows", () => withSandbox(() => {
+  if (process.platform !== "win32") return; // asserted cross-platform in envsetup.test.js
+  for (const line of captureOn({ key: "sk-plus-test-aaaaaaaaaaaa" })) {
+    assert.ok(!/^\s+export\s/.test(line), `dead copy on Windows: ${line}`);
+  }
+  assert.match(captureOn({ key: "sk-plus-test-aaaaaaaaaaaa" }).join("\n"), /setx/);
+}));
