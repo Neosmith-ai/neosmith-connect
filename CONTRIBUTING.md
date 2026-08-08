@@ -262,6 +262,11 @@ npm test                 # every scripts/contract/*.test.js, auto-discovered
 npm run test:all         # same thing — kept as an alias for muscle memory
 npm run smoke            # tests + isolated on/off rehearsal, opens the report
 npm run smoke:ci         # exit-code only, for hooks and CI
+npm run e2e:offline      # all 8 harnesses against the offline contract mock
+npm run test:router-facing   # just the suites the router's deploy gate runs
+
+# One suite at a time, by filename without .test.js:
+node scripts/run-contract.js --only env,env-flag
 ```
 
 The smoke gate writes `.smoke/<timestamp>/` containing `SUMMARY.txt`, the named
@@ -302,6 +307,106 @@ register.
 `node --test <glob>` is deliberately not used: glob args need Node 22+ (this
 repo supports 18), and directory recursion also matches helper files like
 `_sandbox.js`, which then run as failing "tests".
+
+---
+
+## Testing against staging
+
+`neosmith` talks to production by default. `--env staging` points it at
+`staging.router.neosmith.ai`, and `--env local` at a router you are running
+yourself on `:4008`:
+
+```bash
+neosmith --env staging login sk-slm-...   # per-environment key slot
+neosmith --env staging claude on
+neosmith status                           # shows on(staging) and flags mismatches
+neosmith claude off                       # finds staging wiring without --env
+```
+
+Three things worth knowing:
+
+- **Keys are stored per environment.** A staging key never lands in the slot a
+  production invocation reads, so you can be logged into both at once.
+- **`off` is environment-blind on purpose.** Ownership matches *any* known
+  environment, so a plain `neosmith claude off` always finds and removes
+  staging wiring. If it did not, you would be silently left on staging while
+  believing you had disconnected.
+- **`on` refuses to re-point across environments** without `--force`. The
+  snapshot and the restore ledger are write-once; re-pointing would strand the
+  pre-connect baseline and leave `off` unable to restore either environment.
+
+`NEOSMITH_BASE_URL=<url>` still works for an address with no name (a branch
+deploy, an ephemeral test port). It outranks `--env` and says so out loud.
+
+### The full local loop (router + CLI, no cloud, no cost)
+
+```bash
+# terminal 1 — the router candidate
+cd ../router_v4 && python3 -m router_v4.app          # :4008
+
+# terminal 2 — the CLI against it
+cd packages/cli
+node bin/neosmith.js --env local login "$LOCAL_KEY"
+node bin/neosmith.js --env local verify
+node bin/neosmith.js --env local claude on && claude -p "reply OK"
+node bin/neosmith.js claude off
+```
+
+## The router contract
+
+`contract/router-contract.v1.json` is a byte-identical copy of the file owned
+by `router_v4`. It pins the endpoints, auth model, response shapes, headers and
+SKU catalogue this CLI is built against. **Do not edit this copy** — change it
+in `router_v4/contract/`, then re-vendor:
+
+```bash
+cp ../../../router_v4/contract/router-contract.v1.json packages/cli/contract/
+```
+
+`router_v4`'s deploy workflow runs `contract/check_sync.py` against this copy
+and blocks its own staging deploy if the two disagree, so drift surfaces on the
+router's PR rather than in a user's terminal.
+
+Two rules keep the cross-repo CI graph acyclic — do not break either:
+
+- The router's CLI gate never depends on staging being up (it boots a local
+  uvicorn against the candidate commit).
+- This repo's staging e2e never gates the router's deploy.
+
+Breaking changes are always sequenced, never simultaneous: the router lands an
+additive minor, this repo adopts it, the router removes the old behavior in a
+later major. See `router_v4/contract/README.md`.
+
+## Real-harness e2e
+
+`scripts/e2e/run.js` drives the **installed** `neosmith` binary — never the
+source tree — through one harness end to end. Three tiers, by what can honestly
+be automated:
+
+| tier | harnesses | what it asserts |
+|---|---|---|
+| real prompt | claude, codex | the actual binary sends a real prompt through the router and gets an answer |
+| config write | continue, zed, copilot | `on` merged correctly and points at the right environment; `off` restores byte-for-byte |
+| printed | cline, jetbrains, cursor | the printed instructions are correct **for this platform** |
+
+Rehearse the whole thing locally with no secrets and no cost:
+
+```bash
+cd packages/cli && npm run e2e:offline
+```
+
+That runs every harness against the contract-driven mock router and is also a
+step in `test.yml`, so the driver is proven on all three OSes before the paid
+workflow uses it. Real prompts are reported as *skipped* there — a canned
+response proves nothing about inference.
+
+`.github/workflows/e2e-staging.yml` is the paid version: macOS and Windows
+runners, the real Claude Code and Codex binaries, the tarball rather than the
+checkout, and real prompts through staging. It ships **`workflow_dispatch`-only
+on purpose**; the header comment explains what to enable after it has proven
+itself. It needs a `NEOSMITH_STAGING_KEY` repo secret — mint it as `sk-slm-*`
+(cheapest tier, and the shape the CLI's audit redaction covers) with a small
+server-side `dev_hard_ceiling_tokens`.
 
 ---
 

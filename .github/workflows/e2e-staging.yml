@@ -1,0 +1,334 @@
+name: e2e · real harnesses against staging
+
+# The high-fidelity gate. Installs the REAL Claude Code and Codex binaries on
+# macOS and Windows runners, installs @neosmithai/cli from a TARBALL (not the
+# checkout), wires each harness to the staging router, and sends a real prompt
+# through it.
+#
+# CONTRIBUTING.md:88 names this as the only untested step and the place
+# integration bugs surface. scripts/e2e/offline.js already runs the same driver
+# against a contract mock in test.yml on every push — this workflow adds the
+# two things a mock cannot provide: real harness binaries and real inference.
+#
+# COST: two inference calls per matrix cell (claude + codex), four per run,
+# every one pinned to the cheapest sealed SKU in the contract
+# (skus.cheapestForSmoke — never escalates to a frontier model). The CI key
+# additionally carries a server-side dev_hard_ceiling_tokens, so no bug here
+# can produce a large bill.
+#
+# ACYCLICITY INVARIANT (router_v4/contract/README.md): this workflow must never
+# gate router-v4's deploy, and router-v4's CLI gate must never depend on
+# staging being up. Those two rules keep the cross-repo CI graph a DAG.
+
+on:
+  workflow_dispatch:
+    inputs:
+      env:
+        description: Environment to test against
+        default: staging
+        type: choice
+        options: [staging, prod]
+      harnesses:
+        description: Comma-separated harness ids, or "all"
+        default: all
+        type: string
+      claude_version:
+        description: npm version of @anthropic-ai/claude-code (pin when upstream breaks)
+        default: latest
+        type: string
+      codex_version:
+        description: npm version of @openai/codex
+        default: latest
+        type: string
+  # ENABLEMENT: this workflow ships dispatch-only on purpose. It installs
+  # third-party binaries and spends real money, so it should prove itself
+  # first. After three consecutive green manual runs on BOTH macOS and
+  # Windows, uncomment the two triggers below:
+  #
+  #   - schedule: a weekday morning run catches staging drift nobody pushed
+  #     for. It fails red when staging is down, which is a real alert.
+  #   - pull_request: label-gated to `e2e-staging` and same-repo only (see the
+  #     `if:` on the preflight job), so it never runs on a fork and never runs
+  #     unless someone opts a PR in.
+  #
+  # schedule:
+  #   - cron: "0 6 * * 1-5"
+  # pull_request:
+  #   types: [opened, synchronize, reopened, labeled]
+
+# Never pull_request_target — that is the canonical way a staging key leaks
+# from a fork.
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-staging-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  E2E_ENV: ${{ inputs.env || 'staging' }}
+
+jobs:
+  # ── preflight ──────────────────────────────────────────────────────────────
+  # A staging blip must not turn every PR red — a workflow that cries wolf gets
+  # ignored inside a week. So: scheduled runs FAIL on an unhealthy staging
+  # (that is a real alert), while PR runs skip the matrix with a neutral note.
+  preflight:
+    name: staging reachable?
+    runs-on: ubuntu-latest
+    outputs:
+      healthy: ${{ steps.check.outputs.healthy }}
+      have_key: ${{ steps.check.outputs.have_key }}
+    # Fork PRs never see secrets, and an unlabeled PR should not spend money.
+    if: >-
+      github.event_name != 'pull_request' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+       contains(github.event.pull_request.labels.*.name, 'e2e-staging'))
+    steps:
+      - uses: actions/checkout@v4
+      - id: check
+        env:
+          KEY: ${{ secrets.NEOSMITH_STAGING_KEY }}
+        run: |
+          set +e
+          BASE=$(node -p "require('./packages/cli/harnesses.json').environments['${E2E_ENV}'].baseUrl")
+          echo "base=$BASE"
+
+          if [ -z "$KEY" ]; then
+            echo "have_key=false" >> "$GITHUB_OUTPUT"
+            echo "::error::NEOSMITH_STAGING_KEY is not configured — this workflow cannot run."
+            echo "Mint an sk-slm-* key (cheapest tier, and covered by the CLI's audit redaction)," >> "$GITHUB_STEP_SUMMARY"
+            echo "with a small dev_hard_ceiling_tokens, and add it as a repo secret." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "have_key=true" >> "$GITHUB_OUTPUT"
+
+          READY=$(curl -s -o /dev/null -w "%{http_code}" --max-time 20 "$BASE/ready")
+          WHO=$(curl -s -o /dev/null -w "%{http_code}" --max-time 20 \
+                 -H "Authorization: Bearer $KEY" "$BASE/whoami")
+          echo "ready=$READY whoami=$WHO"
+
+          if [ "$READY" = "200" ] && [ "$WHO" = "200" ]; then
+            echo "healthy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "healthy=false" >> "$GITHUB_OUTPUT"
+            echo "$BASE is unhealthy (ready=$READY whoami=$WHO)" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # Confirm the router agrees about which environment answered. A stale DNS
+      # entry or a proxy returns a healthy 200 from the WRONG deployment, and
+      # no amount of client-side hostname matching can detect that — which is
+      # why /whoami carries `environment`.
+      - name: The responding router is the environment we asked for
+        if: steps.check.outputs.healthy == 'true'
+        env:
+          KEY: ${{ secrets.NEOSMITH_STAGING_KEY }}
+        run: |
+          BASE=$(node -p "require('./packages/cli/harnesses.json').environments['${E2E_ENV}'].baseUrl")
+          ANSWERED=$(curl -s --max-time 20 -H "Authorization: Bearer $KEY" "$BASE/whoami" \
+                     | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).environment || 'missing'")
+          echo "asked for '${E2E_ENV}', $BASE answered '$ANSWERED'"
+          if [ "$ANSWERED" != "${E2E_ENV}" ] && [ "$ANSWERED" != "missing" ]; then
+            echo "::error::Asked for ${E2E_ENV} but $BASE identifies as '$ANSWERED'."
+            exit 1
+          fi
+
+      - name: Staging is down — skipping (PR run)
+        if: steps.check.outputs.healthy != 'true' && github.event_name == 'pull_request'
+        run: echo "::notice::${E2E_ENV} is unreachable; skipping the e2e matrix rather than failing this PR."
+
+      - name: Staging is down — failing (scheduled run)
+        if: steps.check.outputs.healthy != 'true' && github.event_name == 'schedule'
+        run: |
+          echo "::error::${E2E_ENV} is unreachable on a scheduled run. This is a real alert."
+          exit 1
+
+  # ── pack ───────────────────────────────────────────────────────────────────
+  # Build the tarball ONCE and assert its contents before spending a cent on
+  # inference. The matrix installs this artifact, so the published package —
+  # not the checkout — is what the real harnesses drive.
+  pack:
+    name: pack + verify the tarball
+    needs: preflight
+    if: needs.preflight.outputs.healthy == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: "20"}
+      - name: Install deps
+        working-directory: packages/cli
+        run: npm install --omit=dev --no-fund --no-audit
+      - name: Assert the tarball contents
+        working-directory: packages/cli
+        # packing.test.js reads `npm pack --dry-run --json` and fails if any
+        # lib module, harnesses.json or the contract is missing from the
+        # allowlist — the "worked locally, broken on npm" class.
+        run: node scripts/run-contract.js --only packing
+      - name: Pack
+        working-directory: packages/cli
+        run: npm pack --pack-destination "$RUNNER_TEMP"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cli-tarball
+          path: ${{ runner.temp }}/neosmithai-cli-*.tgz
+          retention-days: 3
+
+  # ── the real thing ─────────────────────────────────────────────────────────
+  e2e:
+    name: ${{ matrix.os }} · real harnesses
+    needs: [preflight, pack]
+    if: needs.preflight.outputs.healthy == 'true'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # Node 20 only — test.yml already covers 18/20 across three OSes for
+        # everything that does not need a real harness binary.
+        os: [macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: "20"}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: cli-tarball
+          path: ${{ runner.temp }}/tarball
+
+      - name: Install the CLI from the tarball
+        shell: bash
+        run: |
+          set -e
+          TARBALL=$(ls "$RUNNER_TEMP"/tarball/neosmithai-cli-*.tgz)
+          npm install -g "$TARBALL"
+          BIN=$(command -v neosmith)
+          echo "resolved: $BIN"
+          # CONTRIBUTING.md:69 flags this exact confusion — if the binary
+          # resolves into the checkout, the tarball is not what is being tested.
+          case "$BIN" in
+            *"$GITHUB_WORKSPACE"*)
+              echo "::error::neosmith resolved to the checkout, not the installed package"
+              exit 1 ;;
+          esac
+          neosmith --version
+
+      # A bad upstream release is diagnosable and pinnable via the dispatch
+      # inputs. Retried once: a failed install is a runner problem, not a CLI
+      # regression, and the message must say so or it gets mis-triaged.
+      - name: Install the real harness binaries
+        id: harnesses
+        shell: bash
+        run: |
+          install_one() {
+            npm install -g "$1" || { echo "retrying $1"; sleep 10; npm install -g "$1"; }
+          }
+          if ! install_one "@anthropic-ai/claude-code@${{ inputs.claude_version || 'latest' }}"; then
+            echo "::error::Claude Code failed to install — this is a runner/upstream problem, NOT a CLI bug."
+            exit 1
+          fi
+          if ! install_one "@openai/codex@${{ inputs.codex_version || 'latest' }}"; then
+            echo "::error::Codex failed to install — this is a runner/upstream problem, NOT a CLI bug."
+            exit 1
+          fi
+          claude --version || true
+          codex --version || true
+
+      - name: Run the e2e driver over every harness
+        id: run
+        shell: bash
+        env:
+          # The driver reads the key from here and never echoes it. The
+          # UI-driven harnesses print the key inside a box; GitHub masks exact
+          # secret matches, so the driver asserts on base URLs, model ids and
+          # UI-path strings instead — never on the key itself.
+          NEOSMITH_E2E_KEY: ${{ secrets.NEOSMITH_STAGING_KEY }}
+          # Codex reads the key from the environment at runtime: `codex on`
+          # writes only env_key = "OPENAI_API_KEY", a NAME, never the secret.
+          # setx (what the CLI correctly prints on Windows) does not affect the
+          # current process, so CI must export it itself.
+          OPENAI_API_KEY: ${{ secrets.NEOSMITH_STAGING_KEY }}
+        run: |
+          set +e
+          LIST="${{ inputs.harnesses || 'all' }}"
+          if [ "$LIST" = "all" ]; then
+            LIST="claude,codex,continue,zed,copilot,cline,jetbrains,cursor"
+          fi
+          mkdir -p "$RUNNER_TEMP/e2e"
+          FAILED=""
+          IFS=','
+          for h in $LIST; do
+            echo "::group::$h"
+            node packages/cli/scripts/e2e/run.js \
+              --harness "$h" --env "${E2E_ENV}" \
+              --out "$RUNNER_TEMP/e2e/$h"
+            code=$?
+            echo "::endgroup::"
+            # Retry ONLY the two harnesses that make a real inference call.
+            # Config-write and printed-instruction assertions are deterministic;
+            # retrying those would mask a genuine regression.
+            if [ $code -ne 0 ] && { [ "$h" = "claude" ] || [ "$h" = "codex" ]; }; then
+              echo "::warning::$h failed; retrying its inference path once"
+              sleep 15
+              node packages/cli/scripts/e2e/run.js \
+                --harness "$h" --env "${E2E_ENV}" \
+                --out "$RUNNER_TEMP/e2e/$h-retry"
+              code=$?
+            fi
+            [ $code -ne 0 ] && FAILED="$FAILED $h"
+          done
+          unset IFS
+          if [ -n "$FAILED" ]; then
+            echo "::error::e2e failed for:$FAILED"
+            exit 1
+          fi
+
+      # Redact BEFORE upload. ~/.claude/settings.json holds
+      # ANTHROPIC_AUTH_TOKEN verbatim, and the driver's sandbox HOME is never
+      # uploaded — only its scrubbed artifacts directory.
+      - name: Scrub artifacts
+        if: always()
+        shell: bash
+        env:
+          KEY: ${{ secrets.NEOSMITH_STAGING_KEY }}
+        run: |
+          find "$RUNNER_TEMP/e2e" -type f 2>/dev/null | while read -r f; do
+            node -e '
+              const fs=require("fs");const [f,key]=process.argv.slice(1);
+              let s;try{s=fs.readFileSync(f,"utf8")}catch{process.exit(0)}
+              if(key) s=s.split(key).join("***");
+              s=s.replace(/sk-(plus|std|slm)-[A-Za-z0-9_-]{4,}/g,"sk-$1-***")
+                 .replace(/eyJ[A-Za-z0-9_-]{10,}/g,"eyJ***");
+              fs.writeFileSync(f,s);
+            ' "$f" "$KEY"
+          done
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-${{ matrix.os }}
+          path: ${{ runner.temp }}/e2e
+          retention-days: 3
+
+      - name: Summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "### ${{ matrix.os }} · env=${E2E_ENV}"
+            echo ""
+            echo "| harness | result | checks |"
+            echo "|---|---|---|"
+            for d in "$RUNNER_TEMP"/e2e/*/; do
+              h=$(basename "$d")
+              s=$(ls "$d"/summary.*.json 2>/dev/null | head -1)
+              [ -z "$s" ] && continue
+              node -e '
+                const fs=require("fs");const [f,h]=process.argv.slice(2);
+                const j=JSON.parse(fs.readFileSync(f,"utf8"));
+                const pass=j.checks.filter(c=>c.ok).length;
+                console.log(`| ${h} | ${j.ok?"pass":"FAIL"} | ${pass}/${j.checks.length} |`);
+              ' -- "$s" "$h"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
