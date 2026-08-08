@@ -90,12 +90,21 @@ test("claude off fallback strips the tier ladder + top-level defaults when no sn
   assert.ok(!parsed.advisorModel, "top-level advisorModel stripped");
 }));
 
+// Editor settings dir per-OS, mirroring the harness's detectEditorsWithClaudeExt.
+// The sandbox sets HOME/USERPROFILE/APPDATA to the temp home.
+function editorSettingsPath(home, editor) {
+  const dirName = editor === "vscode" ? "Code" : "Cursor";
+  if (process.platform === "win32") return path.join(home, dirName, "User", "settings.json"); // APPDATA=sandbox
+  if (process.platform === "darwin") return path.join(home, "Library", "Application Support", dirName, "User", "settings.json");
+  return path.join(home, ".config", dirName, "User", "settings.json");
+}
+
 test("claude on wires the IDE extension settings.json when the extension is present", () => withSandbox((home) => {
   const { io, harness, claude } = loadCli();
   // Simulate VS Code with the Claude Code extension installed.
   const extDir = path.join(home, ".vscode", "extensions", "anthropic.claude-code-2.1.0-win32-x64");
   fs.mkdirSync(extDir, { recursive: true });
-  const editorSettings = path.join(home, "Code", "User", "settings.json"); // APPDATA=sandbox
+  const editorSettings = editorSettingsPath(home, "vscode");
   io.ensureDir(path.dirname(editorSettings));
   fs.writeFileSync(editorSettings, JSON.stringify({ "editor.fontSize": 14 }, null, 2) + "\n");
 
@@ -121,7 +130,7 @@ test("claude on wires the IDE extension settings.json when the extension is pres
 
 test("claude on without the extension leaves editors untouched and reports none", () => withSandbox((home) => {
   const { io, harness, claude } = loadCli();
-  const editorSettings = path.join(home, "Code", "User", "settings.json");
+  const editorSettings = editorSettingsPath(home, "vscode");
   const res = claude.on({ key: "sk-plus-test-cccccccccccc", model: harness.resolveModel("pro") });
   assert.deepEqual(res.editors, [], "no editors wired when extension absent");
   assert.ok(!io.fileExists(editorSettings), "no editor settings.json created when extension absent");
