@@ -30,7 +30,11 @@ jobs:
         run: npm install --omit=dev --no-fund --no-audit
       - name: Contract tests
         working-directory: packages/cli
-        run: node --test scripts/contract/io.audit.test.js scripts/contract/harness.registry.test.js scripts/contract/claude.test.js scripts/contract/codex.test.js scripts/contract/continue.test.js scripts/contract/ui.harnesses.test.js
+        # run-contract.js discovers every scripts/contract/*.test.js. The old
+        # hand-maintained file list silently drifted — env-preservation,
+        # originals and envsetup were all missing from it, so the publish gate
+        # was weaker than the PR gate that let those changes in.
+        run: node scripts/run-contract.js
       - name: Smoke test — CLI loads + help renders
         working-directory: packages/cli
         run: node bin/neosmith.js help

@@ -397,6 +397,11 @@ Opens the right GitHub issue template in your default browser with a prefilled e
 
 ## Developing: the smoke gate
 
+> Full development guide — building this package locally with `npm pack`,
+> installing it as a customer would without publishing, testing against a
+> throwaway HOME, and releasing — is in
+> **[CONTRIBUTING.md](../../CONTRIBUTING.md)**.
+
 Before pushing changes to the CLI, run the smoke suite — it runs every contract
 test (verbose, named) **and** rehearses a real `claude on → status → off` cycle
 against a throwaway HOME (never your real config), then drops everything into a

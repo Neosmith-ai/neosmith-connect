@@ -37,8 +37,8 @@
     "README.md"
   ],
   "scripts": {
-    "test": "node --test scripts/contract/io.audit.test.js scripts/contract/harness.registry.test.js scripts/contract/claude.test.js scripts/contract/codex.test.js scripts/contract/continue.test.js scripts/contract/env-preservation.test.js scripts/contract/originals.test.js scripts/contract/ui.harnesses.test.js",
-    "test:all": "node --test scripts/contract/*.test.js",
+    "test": "node scripts/run-contract.js",
+    "test:all": "node scripts/run-contract.js",
     "smoke": "node scripts/smoke.js",
     "smoke:ci": "node scripts/smoke.js --quiet",
     "install-hook": "node scripts/install-hook.js"
