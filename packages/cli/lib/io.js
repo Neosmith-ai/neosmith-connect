@@ -67,6 +67,14 @@ function redactAuditString(value) {
   return value;
 }
 
+// The active environment's name, for the audit record. Requires lib/env.js,
+// which requires only lib/manifest.js — io.js never requires lib/harness.js,
+// so there is no cycle. Never throws: an unresolvable environment must not
+// break a write that already succeeded.
+function currentEnvName() {
+  try { return require("./env").current().name; } catch { return null; }
+}
+
 function appendAuditLog(event) {
   // Audit AFTER the operation succeeds — a failed write must not produce a
   // phantom audit entry. Append-only JSON Lines, one record per event.
@@ -78,6 +86,10 @@ function appendAuditLog(event) {
     path:    redactAuditString(event.path || null),
     bytes:   event.bytes || null,
     key:     event.key === true ? "present" : (event.key === false ? "absent" : "absent"),
+    // Which router this invocation was pointed at. A prod/staging mixup is
+    // exactly the incident you reconstruct from this log, and the field is a
+    // name plus a public hostname — it carries no secret.
+    env:     event.env || currentEnvName(),
   };
   fs.appendFileSync(AUDIT_FILE, JSON.stringify(entry) + "\n", { mode: 0o600 });
 }
@@ -162,18 +174,68 @@ function clearSnapshot(harnessId) {
   if (fileExists(bak)) fs.unlinkSync(bak);
 }
 
-// ── ~/.neosmith/config.json — stored key ────────────────────────────────
-function readKeyRef() {
+// ── ~/.neosmith/config.json — stored key, per environment ───────────────────
+//
+// Shape (backward compatible):
+//   { "api_key": "<default-env key>", "keys": { "prod": "…", "staging": "…" } }
+//
+// The invariant that matters: a staging key must NEVER land in the slot a prod
+// invocation reads. So `keys[<env>]` is authoritative, the legacy top-level
+// `api_key` is only ever read for the default environment, and only a
+// default-environment write mirrors into it — which is what keeps install.sh
+// and older CLI versions (which know only `api_key`) reading the prod key.
+
+function defaultEnvName() {
+  // Read the manifest directly. io.js must not require lib/harness.js — every
+  // harness module requires it, so that would be a cycle.
+  try {
+    const m = require("./manifest").read().manifest;
+    return m.defaultEnvironment || "prod";
+  } catch { return "prod"; }
+}
+
+function readKeyRef(envName) {
   const cfg = readJSON(CONFIG_FILE);
-  return cfg && cfg.api_key ? cfg.api_key : null;
+  if (!cfg) return null;
+  const env = envName || defaultEnvName();
+  if (cfg.keys && cfg.keys[env]) return cfg.keys[env];
+  // Legacy fallback: a bare {api_key} file predates named environments, so it
+  // can only ever have meant the default environment.
+  if (env === defaultEnvName() && cfg.api_key) return cfg.api_key;
+  return null;
 }
 
-function writeKeyRef(apiKey) {
-  writeJSON(CONFIG_FILE, { api_key: apiKey }, 0o600);
+function writeKeyRef(apiKey, envName) {
+  const env = envName || defaultEnvName();
+  const cfg = readJSON(CONFIG_FILE) || {};
+  const keys = { ...(cfg.keys || {}) };
+  // Migration: an existing bare api_key was the default environment's key.
+  if (cfg.api_key && !keys[defaultEnvName()]) keys[defaultEnvName()] = cfg.api_key;
+  keys[env] = apiKey;
+  const next = { ...cfg, keys };
+  if (env === defaultEnvName()) next.api_key = apiKey;
+  writeJSON(CONFIG_FILE, next, 0o600);
 }
 
-function clearKeyRef() {
-  if (fileExists(CONFIG_FILE)) fs.unlinkSync(CONFIG_FILE);
+// Remove one environment's key, or the whole file when no environment is named.
+function clearKeyRef(envName) {
+  if (!fileExists(CONFIG_FILE)) return;
+  if (!envName) { fs.unlinkSync(CONFIG_FILE); return; }
+  const cfg = readJSON(CONFIG_FILE) || {};
+  if (cfg.keys) delete cfg.keys[envName];
+  if (envName === defaultEnvName()) delete cfg.api_key;
+  const remaining = Object.keys(cfg.keys || {}).length;
+  if (!remaining && !cfg.api_key) fs.unlinkSync(CONFIG_FILE);
+  else writeJSON(CONFIG_FILE, cfg, 0o600);
+}
+
+// Every environment that currently has a key stored.
+function storedKeyEnvs() {
+  const cfg = readJSON(CONFIG_FILE);
+  if (!cfg) return [];
+  const names = new Set(Object.keys(cfg.keys || {}));
+  if (cfg.api_key) names.add(defaultEnvName());
+  return [...names];
 }
 
 // ── ~/.neosmith/state.json — per-harness on/off flags (UI-driven harnesses) ──
@@ -307,7 +369,7 @@ module.exports = {
   ensureDir, fileExists, readText, readJSON, writeText, writeJSON,
   snapshot, restoreSnapshot, clearSnapshot, snapshotPath, hasSnapshot,
   appendAuditLog,
-  readKeyRef, writeKeyRef, clearKeyRef,
+  readKeyRef, writeKeyRef, clearKeyRef, storedKeyEnvs,
   readState, writeState, setHarnessFlag, getHarnessFlag,
   // Restore ledger (issue #15)
   ABSENT, getAt, setAt, unsetAt, planRestore, applyRestore,

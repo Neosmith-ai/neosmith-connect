@@ -93,6 +93,7 @@ function on(ctx) {
     // model tiers) refreshes the config without losing the pre-connect
     // baseline. Before issue #15 this re-snapshotted the already-NeoSmith TOML
     // and `off` then restored *that*.
+    guardCrossEnv(existingText, ctx);
     io.snapshot("codex", CONFIG);
     io.recordRestore("codex", CONFIG, io.planRestore(parsed, WRITTEN_POINTERS));
 
@@ -113,6 +114,7 @@ function on(ctx) {
     }
   } else {
     ui.warn("`smol-toml` not installed — using a string-based TOML merge. Run `npm install` in the CLI dir for robust parsing.");
+    guardCrossEnv(existingText, ctx);
     io.snapshot("codex", CONFIG);
     out = stringMerge(existingText, model);
     // No parser → no ledger. `off` falls back to the same string surgery.
@@ -182,15 +184,49 @@ function off(ctx) {
   return { ok: true };
 }
 
+// The provider block is keyed on the provider NAME, which is environment
+// independent — that is why detection here never string-matched a host. But
+// the base_url inside it does say which environment, and `status` should.
+// Unlike claude, codex deliberately does NOT short-circuit a repeat `on` — it
+// is the documented way to switch model tiers (pinned by codex.test.js). But
+// re-pointing across ENVIRONMENTS is a different thing: the snapshot and the
+// ledger are write-once, so it would strand the pre-connect baseline and leave
+// `off` unable to restore either environment deterministically.
+function guardCrossEnv(existingText, ctx) {
+  const wired = wiredEnvOf(existingText);
+  const active = (ctx && ctx.env && ctx.env.name) || harness.envName();
+  if (wired && wired !== active && !(ctx && ctx.force)) {
+    ui.die(
+      `Codex is already connected to NeoSmith ${wired} (${baseUrlOf(existingText)}).
+` +
+      `  Run \`neosmith codex off\` first, then \`neosmith --env ${active} codex on\`.
+` +
+      `  Or pass --force to re-point it, abandoning the ${wired} wiring.`,
+    );
+  }
+}
+
+function baseUrlOf(text) {
+  const m = String(text || "").match(/base_url\s*=\s*"([^"]+)"/);
+  return m ? m[1] : null;
+}
+
+function wiredEnvOf(text) {
+  const base = baseUrlOf(text);
+  return base ? harness.envForUrl(base) : null;
+}
+
 function status(ctx) {
   if (!io.fileExists(CONFIG)) return { on: false, detail: `${CONFIG} does not exist` };
   const text = io.readText(CONFIG) || "";
   const hasBlock = /\[model_providers\.neosmith\]/.test(text) || /model_provider\s*=\s*"neosmith"/.test(text);
   const modelMatch = text.match(/^\s*model\s*=\s*"([^"]+)"/m);
+  const wiredEnv = wiredEnvOf(text);
   return {
     on: hasBlock,
+    env: wiredEnv,
     detail: hasBlock
-      ? `model=${modelMatch ? modelMatch[1] : "(unset)"} wire=responses`
+      ? `model=${modelMatch ? modelMatch[1] : "(unset)"} wire=responses base=${baseUrlOf(text) || "(unset)"}`
       : "no neosmith provider block",
   };
 }

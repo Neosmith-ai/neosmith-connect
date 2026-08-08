@@ -91,10 +91,12 @@ async function run(args) {
     }
   }
 
-  // Clear stored key.
-  if (io.readKeyRef()) {
+  // Clear the stored key for EVERY environment, not just the active one — a
+  // reset that left a staging key behind would silently re-authenticate later.
+  const keyEnvs = io.storedKeyEnvs();
+  if (keyEnvs.length) {
     io.clearKeyRef();
-    ui.ok("Cleared stored key reference (~/.neosmith/config.json).");
+    ui.ok(`Cleared stored key reference for ${keyEnvs.join(", ")} (~/.neosmith/config.json).`);
   }
 
   // Audit log retention.

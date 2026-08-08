@@ -26,6 +26,13 @@ const ui = require("../ui");
 
 const CONFIG = path.join(io.HOME, ".claude", "settings.json");
 
+// The environment this invocation is acting as. `on` receives it on ctx;
+// `off`/`status` are called with a bare {} from several call sites, so fall
+// back to the process-wide resolution rather than assuming ctx is populated.
+function activeEnvName(ctx) {
+  return (ctx && ctx.env && ctx.env.name) || harness.envName();
+}
+
 // ── Claude Code IDE extension wiring ────────────────────────────────────────
 // In addition to the CLI config (~/.claude/settings.json), we detect the
 // Anthropic Claude Code extension in installed VS Code-family editors and wire
@@ -136,8 +143,7 @@ function wireEditor(editor, settingsPath, key, tierMap) {
   const id = `claude-ext-${editor}`;
   io.ensureDir(path.dirname(settingsPath));
   const existing = io.readJSON(settingsPath) || {};
-  const already = existing["claudeCode.environmentVariables"] &&
-    JSON.stringify(existing["claudeCode.environmentVariables"]).includes("router.neosmith.ai");
+  const already = editorWiredEnv(existing) !== null;
   io.snapshot(id, settingsPath);
   io.recordRestore(id, settingsPath, io.planRestore(existing, claudeCodeEditorKeys().map((k) => [k])));
   const next = { ...existing, ...claudeCodeEditorSettings(key, tierMap, existing) };
@@ -168,15 +174,27 @@ function unwireEditor(editor, settingsPath) {
   return { editor, ok: true };
 }
 
+// Which NeoSmith environment is ~/.claude/settings.json wired to, if any?
+// Returns an environment name ("prod" / "staging" / …) or null.
+//
+// Ownership is matched against EVERY known environment, not just the active
+// one: `--env staging claude on` followed by a plain `neosmith claude off`
+// must still find and remove the staging wiring, or the user is left silently
+// pointed at staging believing they disconnected.
+function wiredEnvOf(s) {
+  const base = s && s.env && s.env.ANTHROPIC_BASE_URL;
+  return typeof base === "string" ? harness.envForUrl(base) : null;
+}
+
 function hasNeoSmith(s) {
   // Detection keys on the router URL or the canonical NeoSmith auth-token env
   // var. We no longer sniff the prefix of ANTHROPIC_API_KEY: the router is
   // the authority on key validity, and `on` rewrites the entry anyway, so
   // refusing on shape alone was noise.
-  return s && s.env && (
-    (typeof s.env.ANTHROPIC_BASE_URL === "string" && s.env.ANTHROPIC_BASE_URL.includes("router.neosmith.ai")) ||
-    (typeof s.env.ANTHROPIC_AUTH_TOKEN === "string")
-  );
+  return !!(s && s.env && (
+    wiredEnvOf(s) !== null ||
+    typeof s.env.ANTHROPIC_AUTH_TOKEN === "string"
+  ));
 }
 
 function on(ctx) {
@@ -190,9 +208,25 @@ function on(ctx) {
     io.writeText(CONFIG + ".corrupt", JSON.stringify(existing), 0o600).catch?.(() => {});
   }
 
-  if (hasNeoSmith(existing)) {
-    ui.warn(`${CONFIG} already points at NeoSmith.`);
-    return { alreadyOn: true };
+  const wiredEnv = wiredEnvOf(existing);
+  const active = activeEnvName(ctx);
+
+  // Re-pointing a harness from one environment to another is not a no-op:
+  // io.snapshot and io.recordRestore are both write-once, so a second `on`
+  // would overwrite the live wiring while the snapshot still holds the
+  // *pre-NeoSmith* baseline — after which `off` restores neither environment
+  // deterministically. Refuse unless the user is explicit.
+  if (wiredEnv && wiredEnv !== active && !ctx.force) {
+    ui.die(
+      `Claude Code is already connected to NeoSmith ${wiredEnv} (${existing.env.ANTHROPIC_BASE_URL}).\n` +
+      `  Run \`neosmith claude off\` first, then \`neosmith --env ${active} claude on\`.\n` +
+      `  Or pass --force to re-point it, abandoning the ${wiredEnv} wiring.`,
+    );
+  }
+
+  if (hasNeoSmith(existing) && (!wiredEnv || wiredEnv === active)) {
+    ui.warn(`${CONFIG} already points at NeoSmith (${wiredEnv || active}).`);
+    return { alreadyOn: true, env: wiredEnv || active };
   } else if (existing.env && (existing.env.ANTHROPIC_API_KEY || existing.env.ANTHROPIC_BASE_URL || existing.env.ANTHROPIC_AUTH_TOKEN)) {
     ui.log(ui.c("dim", `Backing up pre-connect config → ~/.claude/settings.json.neosmith-snapshot`));
     io.snapshot("claude", CONFIG);
@@ -353,18 +387,27 @@ function unwireAllEditors() {
   return done;
 }
 
+// Which environment is this editor's claudeCode.environmentVariables block
+// wired to? Reads the ANTHROPIC_BASE_URL entry by name rather than
+// stringifying the whole array and substring-matching it — the old form also
+// matched a user's own unrelated value that happened to contain the host.
+function editorWiredEnv(cfg) {
+  const ev = (cfg || {})["claudeCode.environmentVariables"];
+  if (!Array.isArray(ev)) return null;
+  const entry = ev.find((e) => e && e.name === "ANTHROPIC_BASE_URL");
+  return entry && typeof entry.value === "string" ? harness.envForUrl(entry.value) : null;
+}
+
 function editorWiredToNeo(settingsPath) {
-  const cfg = io.readJSON(settingsPath) || {};
-  const ev = cfg["claudeCode.environmentVariables"];
-  return !!ev && JSON.stringify(ev).includes("router.neosmith.ai");
+  return editorWiredEnv(io.readJSON(settingsPath) || {}) !== null;
 }
 
 function status(ctx) {
   const cfg = io.fileExists(CONFIG) ? io.readJSON(CONFIG) : null;
   const env = (cfg && cfg.env) || {};
   const neosmith = env.ANTHROPIC_AUTH_TOKEN || env.ANTHROPIC_API_KEY || env.ANTHROPIC_BASE_URL;
-  const pointingAtNeo = (env.ANTHROPIC_BASE_URL || "").includes("router.neosmith.ai");
-  const cliOn = !!(cfg && neosmith && pointingAtNeo);
+  const wiredEnv = harness.envForUrl(env.ANTHROPIC_BASE_URL || "");
+  const cliOn = !!(cfg && neosmith && wiredEnv);
 
   // Which editors have the extension wired to NeoSmith?
   const editors = detectEditorsWithClaudeExt();
@@ -377,6 +420,7 @@ function status(ctx) {
   if (!neosmith) return { on: false, detail: `no Anthropic env keys present · ${extNote}` };
   return {
     on: cliOn,
+    env: wiredEnv,
     detail: cliOn
       ? `model=${env.ANTHROPIC_MODEL || "(unset)"} base=${env.ANTHROPIC_BASE_URL} · ${extNote}`
       : `pointing at non-NeoSmith backend: ${env.ANTHROPIC_BASE_URL || "(base unset)"} · ${extNote}`,

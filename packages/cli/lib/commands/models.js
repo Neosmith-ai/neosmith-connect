@@ -14,7 +14,7 @@ const ui = require("../ui");
 async function run() {
   ui.banner("NeoSmith · models");
 
-  const apiKey = io.readKeyRef();
+  const apiKey = io.readKeyRef(harness.keyEnv());
   if (!apiKey) ui.die("No key stored. Run `neosmith login <key>` first.");
 
   ui.log(ui.c("dim", `Fetching models from ${http.DEFAULT_ROUTER}/v1/models …`));

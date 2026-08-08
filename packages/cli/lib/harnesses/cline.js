@@ -29,7 +29,7 @@ function on(ctx) {
     `Enable streaming + tool/function calling (required for Cline's agentic actions).`,
     `Save. Cline's plan/act/verify loops now run on NeoSmith.`,
   ]);
-  io.setHarnessFlag("cline", true, { model });
+  io.setHarnessFlag("cline", true, { model, env: (ctx && ctx.env && ctx.env.name) || harness.envName() });
   ui.ok(`Marked Cline as on. (Switch it back in the Cline UI when you run \`neosmith cline off\`.)`);
   return { wrote: false, ui: true };
 }
@@ -56,6 +56,7 @@ function status(ctx) {
   const meta = state.harnesses && state.harnesses.cline;
   return {
     on,
+    env: (meta && meta.env) || null,
     detail: on
       ? `model=${meta ? meta.model : "(unset)"} · UI-configured (re-run on to see the paste values again)`
       : "not connected (run `neosmith cline on` for paste-in values)",

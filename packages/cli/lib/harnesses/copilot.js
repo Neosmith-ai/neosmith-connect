@@ -54,14 +54,20 @@ const CONFIG = path.join(
 const VENDOR = "customendpoint";
 const INPUT_VAR = "${input:neosmithApiKey}";
 
+function vendorUrl(v) {
+  return (v && (v.baseUrl || v.url)) || "";
+}
+
+// One vendor entry is ours when it carries our vendor id AND points at a host
+// declared by some environment. Exact host match, never a substring test.
+function isNeosmithVendor(v) {
+  return !!(v && v.vendor === VENDOR && harness.isNeosmithUrl(vendorUrl(v)));
+}
+
 function hasNeoSmith(parsed) {
   if (!parsed || typeof parsed !== "object") return false;
   const arr = Array.isArray(parsed.vendors) ? parsed.vendors : [];
-  return arr.some((v) =>
-    v && v.vendor === VENDOR &&
-    typeof (v.baseUrl || v.url || "") === "string" &&
-    (v.baseUrl || v.url || "").includes("router.neosmith.ai"),
-  );
+  return arr.some(isNeosmithVendor);
 }
 
 function on(ctx) {
@@ -113,7 +119,7 @@ function on(ctx) {
     `  The model entry is registered; the key prompt appears the first time`,
     `  you select the NeoSmith model in the picker.`,
   ]);
-  io.setHarnessFlag("copilot", true, { model });
+  io.setHarnessFlag("copilot", true, { model, env: (ctx && ctx.env && ctx.env.name) || harness.envName() });
   return { wrote: true, needsKeyInUI: true };
 }
 
@@ -132,10 +138,9 @@ function off(ctx) {
       io.applyRestore(cfg, ledger);
     } else if (Array.isArray(cfg.vendors)) {
       // No ledger (pre-0.8 connect) — strip the NeoSmith vendor entry by hand.
-      cfg.vendors = cfg.vendors.filter((v) =>
-        !(v && v.vendor === VENDOR &&
-          (typeof (v.baseUrl || v.url || "") === "string" &&
-           (v.baseUrl || v.url || "").includes("router.neosmith.ai"))));
+      // Ownership: strips a vendor pointing at ANY known environment, so a
+      // staging-wired entry is removed by a default-env `off` too.
+      cfg.vendors = cfg.vendors.filter((v) => !isNeosmithVendor(v));
     }
     io.writeJSON(CONFIG, cfg, 0o600);
     io.clearRestore("copilot");
@@ -155,10 +160,8 @@ function status(ctx) {
   }
   const cfg = io.readJSON(CONFIG) || {};
   const arr = Array.isArray(cfg.vendors) ? cfg.vendors : [];
-  const neo = arr.find((v) =>
-    v && v.vendor === VENDOR &&
-    (typeof (v.baseUrl || v.url || "") === "string" &&
-     (v.baseUrl || v.url || "").includes("router.neosmith.ai")));
+  const neo = arr.find(isNeosmithVendor);
+  const wiredEnv = neo ? harness.envForUrl(vendorUrl(neo)) : null;
   if (!neo) {
     return { on: false, detail: "no NeoSmith provider registered in chatLanguageModels.json" };
   }
@@ -173,12 +176,14 @@ function status(ctx) {
   if (confirmed) {
     return {
       on: true,
-      detail: `model=${(meta && meta.model) || "(unset)"} · key entered in VS Code (per --confirmed)`,
+      env: wiredEnv,
+      detail: `model=${(meta && meta.model) || "(unset)"} · key entered in VS Code (per --confirmed) · base=${vendorUrl(neo)}`,
     };
   }
   return {
     on: "models-written",
-    detail: `models registered; key not yet entered — open Copilot Chat → Models → Manage Language Models, pick NeoSmith, paste the key`,
+    env: wiredEnv,
+    detail: `models registered (base=${vendorUrl(neo)}); key not yet entered — open Copilot Chat → Models → Manage Language Models, pick NeoSmith, paste the key`,
   };
 }
 

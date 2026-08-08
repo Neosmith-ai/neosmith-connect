@@ -12,6 +12,7 @@
 "use strict";
 
 const io = require("./io");
+const envMod = require("./env");
 const http = require("./http");
 const ui = require("./ui");
 
@@ -26,15 +27,16 @@ function describe(s) {
 
 // Resolve the key to use for a command: explicit arg > stored ref.
 // If none and TTY, prompt to paste. Dies if still none.
-async function resolveKey(explicit) {
+async function resolveKey(explicit, envName) {
   if (explicit) return explicit;
-  const stored = io.readKeyRef();
+  const env = envName || envMod.current().keyEnv;
+  const stored = io.readKeyRef(env);
   if (stored) return stored;
   if (ui.isTTY) {
     const pasted = (await ui.prompt("Paste your NeoSmith API key (sk-plus-*, sk-std-*, sk-slm-*, or eyJ… JWT): ")).trim();
     if (pasted) return pasted;
   }
-  ui.die("No key found. Run `neosmith login <key>` first, or pass --key.");
+  ui.die(`No key found for env=${env}. Run \`neosmith --env ${env} login <key>\` first, or pass --key.`);
 }
 
 // login [key]: round-trip against /whoami, store the ref. Server is the
@@ -74,8 +76,11 @@ async function login(explicitKey, opts = {}) {
     ui.warn(`Could not reach ${routerUrl}/whoami (${e.message}). Storing the key; run \`neosmith verify\` when you're online.`);
   }
 
-  io.writeKeyRef(key);
-  ui.ok(`Key stored in ${io.CONFIG_FILE}`);
+  // Stored under the active environment. A staging key never reaches the
+  // legacy top-level api_key slot that prod invocations read.
+  const envName = opts.envName || envMod.current().keyEnv;
+  io.writeKeyRef(key, envName);
+  ui.ok(`Key stored in ${io.CONFIG_FILE} (env=${envName})`);
   return { key, identity };
 }
 

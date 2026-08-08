@@ -94,10 +94,10 @@ async function run(args) {
   ui.banner("NeoSmith · setup");
 
   // Step 1 — key.
-  let apiKey = io.readKeyRef();
+  let apiKey = io.readKeyRef(harness.keyEnv());
   if (!apiKey) {
     await key.login(flags.key);
-    apiKey = io.readKeyRef();
+    apiKey = io.readKeyRef(harness.keyEnv());
   }
 
   // Step 2 — pick harnesses.

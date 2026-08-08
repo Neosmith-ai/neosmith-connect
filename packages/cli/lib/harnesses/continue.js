@@ -190,10 +190,14 @@ function status(ctx) {
   const hasNeo = /name:\s*NeoSmith/.test(text);
   const modelMatch = text.match(/model:\s*(neosmith\.\S+)/);
   const hasAutocomplete = /title:\s*NeoSmith Autocomplete/.test(text);
+  // The YAML is merged as text, so read the apiBase back out to name the env.
+  const baseMatch = text.match(/apiBase:\s*(\S+)/);
+  const wiredEnv = baseMatch ? harness.envForUrl(baseMatch[1]) : null;
   return {
     on: hasNeo,
+    env: wiredEnv,
     detail: hasNeo
-      ? `model=${modelMatch ? modelMatch[1] : "(unset)"}${hasAutocomplete ? " +autocomplete" : ""}`
+      ? `model=${modelMatch ? modelMatch[1] : "(unset)"}${hasAutocomplete ? " +autocomplete" : ""} base=${baseMatch ? baseMatch[1] : "(unset)"}`
       : "no NeoSmith model entry",
   };
 }

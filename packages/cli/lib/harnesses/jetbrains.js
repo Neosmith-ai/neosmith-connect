@@ -35,7 +35,7 @@ function on(ctx) {
     `Works in IntelliJ, PyCharm, GoLand, WebStorm, Rider, CLion, DataGrip,`,
     `RubyMine, RustRover, PhpStorm, and JetBrains Air.`,
   ]);
-  io.setHarnessFlag("jetbrains", true, { model });
+  io.setHarnessFlag("jetbrains", true, { model, env: (ctx && ctx.env && ctx.env.name) || harness.envName() });
   ui.ok(`Marked JetBrains AI as on. (Switch it back in the IDE when you run \`neosmith jetbrains off\`.)`);
   return { wrote: false, ui: true };
 }
@@ -63,6 +63,7 @@ function status(ctx) {
   const meta = state.harnesses && state.harnesses.jetbrains;
   return {
     on,
+    env: (meta && meta.env) || null,
     detail: on
       ? `model=${meta ? meta.model : "(unset)"} · UI-configured (re-run on to see the paste values again)`
       : "not connected (run `neosmith jetbrains on` for paste-in values)",

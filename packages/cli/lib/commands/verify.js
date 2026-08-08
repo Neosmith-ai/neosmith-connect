@@ -19,7 +19,7 @@ async function run(args) {
     if (args[i] === "--key" || args[i] === "-k") explicit = args[++i];
     else if (args[i].startsWith("--key=")) explicit = args[i].slice("--key=".length);
   }
-  const apiKey = explicit || io.readKeyRef();
+  const apiKey = explicit || io.readKeyRef(harness.keyEnv());
   if (!apiKey) ui.die("No key found. Run `neosmith login <key>` first, or pass --key.");
 
   const routerUrl = harness.ROUTER_URL;

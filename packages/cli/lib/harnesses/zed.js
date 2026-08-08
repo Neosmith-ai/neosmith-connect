@@ -41,8 +41,8 @@ function hasNeoSmith(s) {
   if (!lm || typeof lm !== "object") return false;
   const openai = lm.openai;
   if (!openai || typeof openai !== "object") return false;
-  return (typeof openai.api_url === "string" && openai.api_url.includes("router.neosmith.ai")) ||
-         (typeof openai.base_url === "string" && openai.base_url.includes("router.neosmith.ai"));
+  // Ownership: matches ANY known environment so `off` finds staging wiring too.
+  return harness.isNeosmithUrl(openai.api_url) || harness.isNeosmithUrl(openai.base_url);
 }
 
 function on(ctx) {
@@ -134,13 +134,14 @@ function status(ctx) {
   const cfg = io.readJSON(CONFIG) || {};
   const lm = cfg.language_models || {};
   const openai = lm.openai || {};
-  const pointingAtNeo = (openai.api_url || openai.base_url || "").includes("router.neosmith.ai");
-  if (!pointingAtNeo) return { on: false, detail: "no NeoSmith provider in language_models.openai" };
+  const wiredEnv = harness.envForUrl(openai.api_url || openai.base_url || "");
+  if (!wiredEnv) return { on: false, detail: "no NeoSmith provider in language_models.openai" };
   const models = Array.isArray(openai.available_models)
     ? openai.available_models.map((m) => m.name).join(", ")
     : "(unset)";
   return {
     on: true,
+    env: wiredEnv,
     detail: `models=${models} base=${openai.api_url || openai.base_url}`,
   };
 }

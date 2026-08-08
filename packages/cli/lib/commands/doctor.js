@@ -47,7 +47,13 @@ const FAILURE_MODES = [
   {
     name: "Connection refused / timeout",
     match: (ctx) => ctx.networkError,
-    fix: "Outbound HTTPS to router.neosmith.ai:443 blocked. Check corporate firewall / proxy.",
+    // Name the host actually being probed — against `--env staging` or a
+    // local router, telling the user to check prod's firewall is misleading.
+    fix: () => {
+      let host = harness.ROUTER_URL;
+      try { host = new URL(harness.ROUTER_URL).host; } catch { /* keep the raw value */ }
+      return `Outbound connection to ${host} blocked. Check corporate firewall / proxy.`;
+    },
   },
 ];
 
@@ -59,7 +65,12 @@ function classify(resp, networkError) {
     networkErrorMessage: networkError ? networkError.message : "",
   };
   for (const mode of FAILURE_MODES) {
-    if (mode.match(ctx)) return { mode, ctx };
+    // `fix` may be a thunk when the advice depends on the active environment
+    // (which host to check the firewall for). Resolve it here so every caller
+    // still receives a plain string.
+    if (mode.match(ctx)) {
+      return { mode: { ...mode, fix: typeof mode.fix === "function" ? mode.fix() : mode.fix }, ctx };
+    }
   }
   return { mode: { name: "Unknown failure", fix: "Run `neosmith verify` for raw response." }, ctx };
 }
@@ -110,7 +121,7 @@ async function probeFor(h, apiKey) {
 }
 
 async function checkHarness(h, apiKey) {
-  const s = h.status({});
+  const s = h.status({ env: harness.envInfo() });
   if (!s.on) {
     return { harness: h.id, name: h.name, ok: true, detail: "not connected (skipped)", skipped: true };
   }
@@ -165,10 +176,11 @@ function parseFlags(args) {
 
 async function run(args) {
   const flags = parseFlags(args);
-  const apiKey = io.readKeyRef();
-  if (!apiKey) ui.die("No key found. Run `neosmith login <key>` first.");
+  const active = harness.envInfo();
+  const apiKey = io.readKeyRef(active.keyEnv);
+  if (!apiKey) ui.die(`No key found for env=${active.name}. Run \`neosmith --env ${active.name} login <key>\` first.`);
 
-  ui.banner("NeoSmith · doctor");
+  ui.banner(`NeoSmith · doctor · env=${active.name} (${active.baseUrl})`);
 
   const harnesses = flags.harness
     ? [harness.get(flags.harness)].filter(Boolean)

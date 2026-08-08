@@ -57,7 +57,7 @@ function on(ctx) {
     `Fully scriptable alternative (no Pro license needed):`,
     `  neosmith claude on      # then install the "Claude Code" extension in Cursor`,
   ]);
-  io.setHarnessFlag("cursor", true, { model });
+  io.setHarnessFlag("cursor", true, { model, env: (ctx && ctx.env && ctx.env.name) || harness.envName() });
   ui.ok(`Marked Cursor as on. (Switch it back in Cursor → Settings → Models when you run \`neosmith cursor off\`.)`);
   return { wrote: false, ui: true };
 }
@@ -87,6 +87,7 @@ function status(ctx) {
   const meta = state.harnesses && state.harnesses.cursor;
   return {
     on,
+    env: (meta && meta.env) || null,
     detail: on
       ? `model=${meta ? meta.model : "(unset)"} · UI-configured (re-run on to see the paste-in values again)`
       : "not connected (run `neosmith cursor on` for the Settings → Models paste-in values)",
