@@ -28,7 +28,7 @@ function top() {
   ui.log("  " + ui.c("cyan", "neosmith setup") + "                Detect installed tools, wire selected, run doctor");
   ui.log("  " + ui.c("cyan", "neosmith reset [--all]") + "         Disconnect every harness (clears key; --keep-audit to keep log)");
   ui.log("  " + ui.c("cyan", "neosmith feedback [bug|idea]") + "   Open GitHub issue template in browser (auto-filled env block)");
-  ui.log("  " + ui.c("cyan", "neosmith uninstall") + "             Disconnect all + remove ~/.neosmith");
+  ui.log("  " + ui.c("cyan", "neosmith uninstall [--all]") + "     Disconnect all + remove ~/.neosmith and the launcher");
   ui.log("  " + ui.c("cyan", "neosmith help [harness]") + "        This message, or per-harness help");
   ui.log("");
   ui.log(ui.c("bold", "Harnesses"));
