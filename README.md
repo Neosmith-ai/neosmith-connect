@@ -42,7 +42,24 @@ npm run smoke                       # smoke gate: tests + isolated on/off rehear
 npm run scaffold                    # re-stamp from the source repos (deletes everything first)
 ```
 
-## Testing & the smoke gate
+## Filing feedback or an issue
+
+The fastest way to tell us something isn't working (or open an enhancement request) is
+`neosmith feedback` — it opens the right GitHub issue template in your default browser
+with a prefilled body so all you have to do is review and submit:
+
+```bash
+neosmith feedback                      # defaults to the Bug template
+neosmith feedback bug "Tab autocomplete broken in Cursor"
+neosmith feedback idea                 # opens the Enhancement template instead
+neosmith feedback --no-open            # print the URL + body for headless / SSH use
+neosmith feedback --message "..."      # set the message via flag instead of positional
+```
+
+The command auto-fills a non-sensitive Environment block (CLI version, Node, OS, router
+host — **never** your API key, never a query string), so reviewers have the context they
+need without you having to copy it. The full body and URL are also printed, so the
+deep-link is recoverable on systems where the browser launch fails.
 
 The CLI's correctness gate is `npm run smoke`. It runs **all** contract tests
 (`packages/cli/scripts/contract/*.test.js`, verbose) **and** rehearses a real
