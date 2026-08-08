@@ -22,7 +22,7 @@
 const { spawnSync } = require("child_process");
 const { run: runTests } = require("node:test");
 const { spec: specReporter } = require("node:test/reporters");
-const { Transform } = require("stream");
+const { Writable } = require("stream");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -59,9 +59,15 @@ function runContractSuite(reportPath) {
     // Parse the rendered spec/TAP text: top-level "✔ name"/"✖ name" (and the
     // "not ok" TAP form) mark leaf test results. Counting the rendered lines
     // is version-robust (the run-stream's event timing is not).
+    //
+    // The sink MUST be a Writable, not a Transform. A Transform's readable
+    // side has nobody reading it here, so once its buffer fills, writes stop
+    // being acknowledged, "finish" never fires and this promise never settles
+    // — main() then falls off the end of the event loop and the process exits
+    // 0 with no output. That is a smoke gate that always "passes".
     let pass = 0, fail = 0;
-    const counter = new Transform({
-      transform(chunk, _enc, cb) {
+    const counter = new Writable({
+      write(chunk, _enc, cb) {
         const s = chunk.toString();
         buf += s;
         if (!QUIET) process.stdout.write(s);
@@ -69,7 +75,7 @@ function runContractSuite(reportPath) {
           if (/^\s*✔/.test(line)) pass++;
           else if (/^\s*✖/.test(line)) fail++;
         }
-        cb(null, chunk);
+        cb();
       },
     });
     counter.on("finish", () => {
@@ -91,10 +97,18 @@ function runRehearsal(dir) {
   mkdir(path.join(home, "Code", "User"));
   mkdir(path.join(home, "Cursor", "User"));
 
-  // Pre-existing editor settings to prove merge-not-clobber + byte-for-byte restore.
+  // Pre-existing editor settings to prove merge-not-clobber + byte-for-byte
+  // restore. VS Code's block carries a USER-DEFINED env var (issue #15): it
+  // must survive `on` and be back after `off`.
   const codeSettings = path.join(home, "Code", "User", "settings.json");
   const cursorSettings = path.join(home, "Cursor", "User", "settings.json");
-  const codeBefore = JSON.stringify({ "editor.fontSize": 15, "workbench.colorTheme": "Default Dark+" }, null, 2) + "\n";
+  const codeBefore = JSON.stringify({
+    "editor.fontSize": 15,
+    "workbench.colorTheme": "Default Dark+",
+    "claudeCode.environmentVariables": [
+      { name: "HTTPS_PROXY", value: "http://corp-proxy:8080" },
+    ],
+  }, null, 2) + "\n";
   const cursorBefore = JSON.stringify({ "editor.minimap.enabled": false }, null, 2) + "\n";
   fs.writeFileSync(codeSettings, codeBefore);
   fs.writeFileSync(cursorSettings, cursorBefore);
@@ -129,6 +143,21 @@ function runRehearsal(dir) {
     'claude.off({});',
     'console.log("\\n### STATUS AFTER OFF ###");',
     'console.log(JSON.stringify(claude.status({})));',
+    // Issue #15: a second `on` must never overwrite the pre-connect snapshot.
+    // codex is the harness that used to lose the user config here.
+    'console.log("\\n### CODEX on/on/off (issue #15 double-connect) ###");',
+    'const codex = require(cli + "/lib/harnesses/codex");',
+    'const codexCfg = path.join(home, ".codex", "config.toml");',
+    'fs.mkdirSync(path.dirname(codexCfg), { recursive: true });',
+    'const codexBefore = \'model = "gpt-5-user"\\nmodel_provider = "openai"\\n\';',
+    'fs.writeFileSync(codexCfg, codexBefore);',
+    'fs.writeFileSync(path.join(outdir, "codex.config.before.toml"), codexBefore);',
+    'codex.on({ key: "sk-plus-smoke-XXXXXXXXXXXX", model: h.resolveModel("pro") });',
+    'save("codex.config.wired.toml", codexCfg);',
+    'codex.on({ key: "sk-plus-smoke-XXXXXXXXXXXX", model: h.resolveModel("basic") });',
+    'codex.off({});',
+    'save("codex.config.after-off.toml", codexCfg);',
+    'console.log("CODEX_RESTORED=" + (read(codexCfg) === codexBefore));',
   ].join("\n"));
 
   const res = spawnSync(process.execPath, [runner, home, dir], { cwd: PKG, encoding: "utf8" });
@@ -149,11 +178,24 @@ function runRehearsal(dir) {
   const cliRemoved = !fs.existsSync(cliSettings);
   const statusOn = /"on":true/.test(log_);
 
+  // Issue #15 invariants.
+  const wiredCode = read(path.join(dir, "editor-wired.code.settings.json"));
+  let userVarMerged = false;
+  try {
+    const vars = JSON.parse(wiredCode)["claudeCode.environmentVariables"] || [];
+    const byName = Object.fromEntries(vars.map((e) => [e.name, e.value]));
+    userVarMerged = byName.HTTPS_PROXY === "http://corp-proxy:8080" &&
+      byName.ANTHROPIC_BASE_URL === "https://router.neosmith.ai";
+  } catch { /* left false */ }
+  const codexRestored = /CODEX_RESTORED=true/.test(log_);
+
   const checks = [
     ["claude on → status reports on:true", statusOn],
+    ["on → user's own editor env var merged, not clobbered (issue #15)", userVarMerged],
     ["off → VS Code settings restored byte-for-byte", codeRestored],
     ["off → Cursor settings restored byte-for-byte", cursorRestored],
     ["off → ~/.claude/settings.json removed (was absent pre-connect)", cliRemoved],
+    ["codex on → on → off restores the user's config (issue #15)", codexRestored],
   ];
   const ok = checks.every((c) => c[1]) && res.status === 0;
   return { ok, checks, log: log_ };
@@ -190,6 +232,9 @@ async function main() {
   lines.push("  editor-before.*.settings.json editor settings before connect");
   lines.push("  editor-after.*.settings.json  editor settings after disconnect (must equal before)");
   lines.push("  cli.settings.after-off.json   ~/.claude/settings.json after off (absent)");
+  lines.push("  codex.config.before.toml      ~/.codex/config.toml before connect");
+  lines.push("  codex.config.wired.toml       ~/.codex/config.toml as written by `on`");
+  lines.push("  codex.config.after-off.toml   ~/.codex/config.toml after on→on→off (must equal before)");
   lines.push("  home/                         the sandbox HOME the rehearsal ran in");
   write(path.join(dir, "SUMMARY.txt"), lines.join("\n") + "\n");
 

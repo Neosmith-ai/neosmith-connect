@@ -78,6 +78,9 @@ function on(ctx) {
   }
 
   io.snapshot("copilot", CONFIG);
+  // Ledger the prior vendors array so `off` restores it as it was rather than
+  // filtering a mutated copy (issue #15).
+  io.recordRestore("copilot", CONFIG, io.planRestore(existing, [["vendors"]]));
 
   const next = { ...existing };
   next.vendors = Array.isArray(existing.vendors) ? existing.vendors.slice() : [];
@@ -117,24 +120,30 @@ function on(ctx) {
 function off(ctx) {
   if (!io.fileExists(CONFIG)) {
     io.clearSnapshot("copilot");
+    io.clearRestore("copilot");
     ui.log(`${CONFIG} not present — nothing to disconnect.`);
     return { ok: true };
   }
   const restored = io.restoreSnapshot("copilot", CONFIG);
   if (!restored) {
-    // Fallback: strip the NeoSmith vendor entry by hand.
     const cfg = io.readJSON(CONFIG) || {};
-    if (Array.isArray(cfg.vendors)) {
+    const ledger = io.readRestore("copilot", CONFIG);
+    if (ledger) {
+      io.applyRestore(cfg, ledger);
+    } else if (Array.isArray(cfg.vendors)) {
+      // No ledger (pre-0.8 connect) — strip the NeoSmith vendor entry by hand.
       cfg.vendors = cfg.vendors.filter((v) =>
         !(v && v.vendor === VENDOR &&
           (typeof (v.baseUrl || v.url || "") === "string" &&
            (v.baseUrl || v.url || "").includes("router.neosmith.ai"))));
     }
     io.writeJSON(CONFIG, cfg, 0o600);
+    io.clearRestore("copilot");
     ui.ok(`Removed NeoSmith vendor from ${CONFIG} (no pre-connect snapshot was available).`);
     io.setHarnessFlag("copilot", false);
     return { ok: true, partial: true };
   }
+  io.clearRestore("copilot");
   io.setHarnessFlag("copilot", false);
   ui.ok(`Restored pre-NeoSmith ${CONFIG} from snapshot.`);
   return { ok: true };

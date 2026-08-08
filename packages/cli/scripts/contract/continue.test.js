@@ -1,13 +1,15 @@
 // scripts/contract/continue.test.js
 //
 // T8 contract for continue.js. Continue has the same asymmetry as codex:
-// snapshot-always, no short-circuit on already-on.
+// snapshot-once (was snapshot-always before issue #15), no short-circuit on
+// already-on. The env/config preservation contract lives in
+// env-preservation.test.js; this file keeps the continue-specific shape tests.
 //
 // Behavior under test:
 //   - on() writes ~/.continue/config.yaml with `name: NeoSmith` model entry.
 //   - on()/on() does not short-circuit.
-//   - off() restores from snapshot; with no snapshot, regex-strips the
-//     `name: NeoSmith` entry.
+//   - off() restores from snapshot; with neither snapshot nor ledger, strips
+//     the `name: NeoSmith` entry.
 
 "use strict";
 

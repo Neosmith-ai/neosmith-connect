@@ -1,9 +1,11 @@
 // scripts/contract/claude.test.js
 //
-// T8 contract for claude.js. Encodes the existing behavior — claude is the
-// only harness with the warn-no-op `hasNeoSmith(existing)` short-circuit (see
-// T1 ground truth). Other file-writable harnesses (codex, continue) snapshot
-// on every on() call and do not short-circuit; their tests live separately.
+// T8 contract for claude.js. Encodes the existing behavior — claude is one of
+// the harnesses with the warn-no-op `hasNeoSmith(existing)` short-circuit (see
+// T1 ground truth). codex and continue do not short-circuit; their tests live
+// separately. Since issue #15 every harness takes its pre-connect snapshot
+// only ONCE, so a second `on` can never overwrite the baseline; the
+// user-config preservation contract lives in env-preservation.test.js.
 //
 // Behavior under test (per codex.js:21-60 / harness.js:5-6 / harness.js:21-49):
 //   - on(): if alreadyNeoSmith(existing) → return { alreadyOn: true }, no write

@@ -32,6 +32,13 @@ const CONFIG_DIR = path.join(io.HOME, ".codex");
 const CONFIG = path.join(CONFIG_DIR, "config.toml");
 const PROVIDER_BLOCK = "neosmith";
 
+// Every pointer on() writes into the parsed TOML, for the restore ledger.
+const WRITTEN_POINTERS = [
+  ["model"],
+  ["model_provider"],
+  ["model_providers", PROVIDER_BLOCK],
+];
+
 let toml;
 try { toml = require("smol-toml"); } catch { toml = null; }
 
@@ -53,7 +60,6 @@ function stringMerge(existingText, model) {
   // Drop prior top-level model / model_provider lines.
   text = text.replace(/(^|\n)\s*model\s*=.*(?=\n)/g, "").trim();
   text = text.replace(/(^|\n)\s*model_provider\s*=.*(?=\n)/g, "").trim();
-  text = text.replace(/(^|\n)\s*\[model_providers\]\s*(?=\n)/g, "").trim();
 
   const lines = [];
   lines.push(`model = "${model}"`);
@@ -79,11 +85,12 @@ function on(ctx) {
       ui.warn(`Existing ${CONFIG} had a TOML parse error (${e.message}); merging as fresh with the prior text preserved in a snapshot.`);
     }
     if (!parsed || typeof parsed !== "object") parsed = {};
-    const hadNeo = parsed.model_provider === PROVIDER_BLOCK ||
-      (parsed.model_providers && parsed.model_providers[PROVIDER_BLOCK]);
-    if (!hadNeo && existingText) io.snapshot("codex", CONFIG);
-    else if (!existingText) io.snapshot("codex", CONFIG); // tombstone
-    else io.snapshot("codex", CONFIG);
+    // Snapshot + ledger are both write-once, so a second `on` (e.g. to switch
+    // model tiers) refreshes the config without losing the pre-connect
+    // baseline. Before issue #15 this re-snapshotted the already-NeoSmith TOML
+    // and `off` then restored *that*.
+    io.snapshot("codex", CONFIG);
+    io.recordRestore("codex", CONFIG, io.planRestore(parsed, WRITTEN_POINTERS));
 
     parsed.model = model;
     parsed.model_provider = PROVIDER_BLOCK;
@@ -104,6 +111,7 @@ function on(ctx) {
     ui.warn("`smol-toml` not installed — using a string-based TOML merge. Run `npm install` in the CLI dir for robust parsing.");
     io.snapshot("codex", CONFIG);
     out = stringMerge(existingText, model);
+    // No parser → no ledger. `off` falls back to the same string surgery.
   }
 
   io.writeText(CONFIG, out, 0o600);
@@ -117,20 +125,40 @@ function on(ctx) {
 function off(ctx) {
   if (!io.fileExists(CONFIG)) {
     io.clearSnapshot("codex");
+    io.clearRestore("codex");
     ui.log(`${CONFIG} not present — nothing to disconnect.`);
     return { ok: true };
   }
   const restored = io.restoreSnapshot("codex", CONFIG);
   if (!restored) {
-    // Fallback: strip our block via string surgery.
-    let text = io.readText(CONFIG) || "";
-    text = text.replace(/\n?\[model_providers\.neosmith\][^\[]*/g, "").trim();
-    text = text.replace(/(^|\n)\s*model\s*=.*(?=\n)/g, "").trim();
-    text = text.replace(/(^|\n)\s*model_provider\s*=.*(?=\n)/g, "").trim();
-    io.writeText(CONFIG, text + "\n", 0o600);
+    // No snapshot — replay the ledger so the user's own model / provider
+    // settings come back rather than being regex-stripped away.
+    const ledger = io.readRestore("codex", CONFIG);
+    const text = io.readText(CONFIG) || "";
+    let out = null;
+    if (ledger && toml) {
+      try {
+        const parsed = toml.parse(text) || {};
+        io.applyRestore(parsed, ledger);
+        out = toml.stringify(parsed);
+      } catch (e) {
+        ui.warn(`Could not replay the restore ledger (${e.message}); falling back to a text strip.`);
+      }
+    }
+    if (out === null) {
+      // Fallback: strip our block via string surgery.
+      let t = text;
+      t = t.replace(/\n?\[model_providers\.neosmith\][^\[]*/g, "").trim();
+      t = t.replace(/(^|\n)\s*model\s*=.*(?=\n)/g, "").trim();
+      t = t.replace(/(^|\n)\s*model_provider\s*=.*(?=\n)/g, "").trim();
+      out = t + "\n";
+    }
+    io.writeText(CONFIG, out, 0o600);
+    io.clearRestore("codex");
     ui.ok(`Removed NeoSmith block from ${CONFIG} (no pre-connect snapshot was available).`);
     return { ok: true, partial: true };
   }
+  io.clearRestore("codex");
   ui.ok(`Restored pre-NeoSmith ${CONFIG} from snapshot.`);
   return { ok: true };
 }

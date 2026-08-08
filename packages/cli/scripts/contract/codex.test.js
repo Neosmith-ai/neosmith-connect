@@ -1,17 +1,23 @@
 // scripts/contract/codex.test.js
 //
 // T8 contract for codex.js. Codex has DIFFERENT idempotency than claude:
-// codex snapshots pre-connect state on every on() call (including the
-// "already-on" branch), and does NOT short-circuit. This asymmetry is
-// preserved intact per T1 ground truth. See T1 in the build plan.
+// codex does NOT short-circuit on already-on — re-running `on` re-writes the
+// TOML, which is how `neosmith codex on --model X` switches tiers. This
+// asymmetry is preserved intact per T1 ground truth. See T1 in the build plan.
+//
+// Changed for issue #15: the manifest idempotency label moved from
+// "snapshot-always" to "snapshot-once". on() still re-writes, but the
+// pre-connect .bak is now taken only once — re-snapshotting on the second call
+// captured the already-NeoSmith TOML and made `off` restore *that*, destroying
+// the user's config. The preservation contract lives in
+// env-preservation.test.js; this file keeps the codex-specific shape tests.
 //
 // Behavior under test:
 //   - on() writes ~/.codex/config.toml with a NeoSmith provider block.
-//   - on()/on() does not short-circuit: it snapshots each time (which is
-//     effectively a no-op for an unchanged file but still appends an audit
-//     entry) and re-writes the TOML.
-//   - off() with no pre-connect snapshot strips the [model_providers.neosmith]
-//     block via regex.
+//   - on()/on() does not short-circuit: it re-writes the TOML and leaves the
+//     pre-connect snapshot alone.
+//   - off() with neither snapshot nor ledger strips the
+//     [model_providers.neosmith] block via regex.
 
 "use strict";
 
@@ -75,9 +81,9 @@ test("codex on does NOT short-circuit on already-on (asymmetry with claude)", ()
   const start = Date.now();
   while (Date.now() - start < 50) { /* spin */ }
 
-  // Codex's contract is "snapshot-always, no short-circuit" — running on()
-  // twice does NOT return { alreadyOn: true }. It re-snapshots (no-op for an
-  // unchanged pre-connect) and re-writes the file (mtime bumps).
+  // Codex's contract is "snapshot-once, no short-circuit" — running on()
+  // twice does NOT return { alreadyOn: true }. It re-writes the file (mtime
+  // bumps) while leaving the pre-connect snapshot intact.
   const res = codex.on({ key: "sk-plus-test-aaaaaaaaaaaa", model: "pro" });
   assert.equal(res.alreadyOn, undefined,
     "codex.on() should NOT return alreadyOn — that's claude's contract");
@@ -98,10 +104,13 @@ test("codex off strips the NeoSmith block when no pre-connect snapshot exists", 
 
   codex.on({ key: "sk-plus-test-aaaaaaaaaaaa", model: "pro" });
 
-  // Simulate deletion of the .bak (no pre-connect snapshot available).
-  // off() must fall back to text strip and preserve user content.
+  // Simulate deletion of the .bak AND the restore ledger (the pre-0.8 case:
+  // a connect made before either existed). off() must fall back to the text
+  // strip and preserve user content. The ledger path is covered separately in
+  // env-preservation.test.js.
   const bak = path.join(home, ".neosmith", "snapshots", "codex.bak");
   fs.unlinkSync(bak);
+  io.clearRestore("codex");
 
   codex.off({});
   const afterText = fs.readFileSync(cfg, "utf8");
