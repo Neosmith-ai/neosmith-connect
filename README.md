@@ -83,8 +83,11 @@ removes the gate). CI always runs it regardless, so nothing untested reaches `ma
   irm https://raw.githubusercontent.com/Neosmith-ai/neosmith-connect/main/packages/cli/install.ps1 | iex
   ```
 
-## Build brief
+## The CLI guide
 
-The full ticket backlog for this transition lives in
-`packages/cli/../../docs` in the upstream repos; locally, consult the brief
-this branch was generated from.
+The canonical, code-verified guide for the `@neosmithai/cli` package is
+[`packages/cli/README.md`](packages/cli/README.md) — it's what `npm view @neosmithai/cli`
+renders and what ships inside the published package. It covers all eight
+harnesses, every command, the model tiers, key storage, troubleshooting, and
+the smoke gate. The Jekyll site under `site/` mirrors it for per-harness deep
+dives; if the two ever disagree, **`packages/cli/README.md` is authoritative**.

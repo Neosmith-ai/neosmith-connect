@@ -39,7 +39,9 @@ function top() {
   ui.log("  --dry-run         (global) print what would be written without touching disk");
   ui.log("");
   ui.log(ui.c("dim", "No NeoSmith account yet? Email contact-us@neosmith.ai for a trial key."));
-  ui.log(ui.c("dim", "Docs: https://neosmith-ai.github.io/neosmith-connect/ · Issues: https://github.com/Neosmith-ai/neosmith-connect/issues"));
+  ui.log(ui.c("dim", "Full guide: https://github.com/Neosmith-ai/neosmith-connect/blob/main/packages/cli/README.md"));
+  ui.log(ui.c("dim", "Docs site: https://neosmith-ai.github.io/neosmith-connect/ · Issues: https://github.com/Neosmith-ai/neosmith-connect/issues"));
+  ui.log(ui.c("dim", "Report a bug or request a feature: neosmith feedback [bug|idea]"));
 }
 
 function one(id) {
