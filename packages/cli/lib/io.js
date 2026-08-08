@@ -8,6 +8,18 @@
 //   A missing snapshot means "nothing to restore" (e.g. the file didn't exist
 //   before connect), so `off` removes the NeoSmith keys it wrote instead.
 //
+//   Snapshots are WRITE-ONCE (issue #15): once a .bak exists it is the
+//   pre-connect baseline and a second `on` must not overwrite it with the
+//   already-NeoSmith config. `restoreSnapshot` unlinks the .bak, so the next
+//   `on` after an `off` correctly takes a fresh baseline.
+//
+// Restore ledger (issue #15): `on` also records, per harness and per file,
+// every key it is about to touch together with that key's PRIOR value (or the
+// ABSENT sentinel). `off` replays the ledger when the .bak is unavailable, so
+// user-defined values are put back and only NeoSmith-introduced keys are
+// deleted. Lives under ~/.neosmith/state.json (mode 0600) — prior values can
+// contain the user's own API keys, so it never reaches the audit log.
+//
 // Audit log (T4): every state-changing io operation appends a JSON-Lines
 // record to ~/.neosmith/audit.log AFTER the operation succeeds. The log is
 // always redacted of key material (sk-plus- / sk-std- / sk-slm- / eyJ).
@@ -90,11 +102,28 @@ function writeJSON(p, obj, mode) {
   writeText(p, JSON.stringify(obj, null, 2) + "\n", mode || 0o600);
 }
 
+function snapshotPath(harnessId) {
+  return path.join(SNAPSHOTS_DIR, `${harnessId}.bak`);
+}
+
+function hasSnapshot(harnessId) {
+  return fileExists(snapshotPath(harnessId));
+}
+
 // Byte-for-byte snapshot of a file's current contents (or a tombstone marker
 // if the file does not yet exist, so `off` knows to delete rather than restore).
+//
+// WRITE-ONCE: an existing .bak is the pre-connect baseline. Overwriting it on a
+// second `on` is how issue #15 lost user configs — codex/continue snapshot on
+// every call, so the second run captured the already-NeoSmith file and `off`
+// then "restored" that.
 function snapshot(harnessId, filePath) {
   ensureDir(SNAPSHOTS_DIR);
-  const bak = path.join(SNAPSHOTS_DIR, `${harnessId}.bak`);
+  const bak = snapshotPath(harnessId);
+  if (fileExists(bak)) {
+    appendAuditLog({ op: "snapshot-skip", harness: harnessId, path: filePath });
+    return bak;
+  }
   if (fileExists(filePath)) {
     fs.copyFileSync(filePath, bak);
   } else {
@@ -107,7 +136,7 @@ function snapshot(harnessId, filePath) {
 
 // Restore from a snapshot. Returns true if a snapshot existed and was applied.
 function restoreSnapshot(harnessId, filePath) {
-  const bak = path.join(SNAPSHOTS_DIR, `${harnessId}.bak`);
+  const bak = snapshotPath(harnessId);
   if (!fileExists(bak)) return false;
   let isTombstone = false;
   try {
@@ -129,7 +158,7 @@ function restoreSnapshot(harnessId, filePath) {
 }
 
 function clearSnapshot(harnessId) {
-  const bak = path.join(SNAPSHOTS_DIR, `${harnessId}.bak`);
+  const bak = snapshotPath(harnessId);
   if (fileExists(bak)) fs.unlinkSync(bak);
 }
 
@@ -169,6 +198,106 @@ function getHarnessFlag(harnessId) {
   return !!(state.harnesses && state.harnesses[harnessId] && state.harnesses[harnessId].on);
 }
 
+// ── Restore ledger (issue #15) ──────────────────────────────────────────────
+// A pointer is an ARRAY of key segments, not a dotted string — editor settings
+// use literal dotted keys ("claudeCode.environmentVariables"), so splitting on
+// "." would address the wrong node. ABSENT marks "this key did not exist
+// pre-connect", which is what tells `off` to delete rather than restore.
+const ABSENT = "__neosmith_absent__";
+
+function getAt(obj, pointer) {
+  let cur = obj;
+  for (const seg of pointer) {
+    if (!cur || typeof cur !== "object" || !Object.prototype.hasOwnProperty.call(cur, seg)) return ABSENT;
+    cur = cur[seg];
+  }
+  return cur;
+}
+
+function setAt(obj, pointer, value) {
+  let cur = obj;
+  for (let i = 0; i < pointer.length - 1; i++) {
+    const seg = pointer[i];
+    if (!cur[seg] || typeof cur[seg] !== "object") cur[seg] = {};
+    cur = cur[seg];
+  }
+  cur[pointer[pointer.length - 1]] = value;
+}
+
+function unsetAt(obj, pointer) {
+  let cur = obj;
+  for (let i = 0; i < pointer.length - 1; i++) {
+    const seg = pointer[i];
+    if (!cur || typeof cur !== "object" || !Object.prototype.hasOwnProperty.call(cur, seg)) return;
+    cur = cur[seg];
+  }
+  if (cur && typeof cur === "object") delete cur[pointer[pointer.length - 1]];
+}
+
+function clonePrior(v) {
+  if (v === ABSENT || v === null || typeof v !== "object") return v;
+  return JSON.parse(JSON.stringify(v));
+}
+
+// Build ledger entries for the pointers `on` is about to write. Each pointer is
+// collapsed to the SHALLOWEST prefix that does not exist yet: if `env` is
+// absent pre-connect, recording `["env"] → ABSENT` removes the whole block on
+// `off`, which also prunes the container NeoSmith created. Otherwise the leaf
+// itself is recorded so sibling user keys are never touched.
+function planRestore(obj, pointers) {
+  const seen = new Set();
+  const entries = [];
+  for (const pointer of pointers) {
+    let recorded = pointer;
+    for (let i = 1; i <= pointer.length; i++) {
+      const prefix = pointer.slice(0, i);
+      if (getAt(obj, prefix) === ABSENT) { recorded = prefix; break; }
+    }
+    const k = JSON.stringify(recorded);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    entries.push({ pointer: recorded, prior: clonePrior(getAt(obj, recorded)) });
+  }
+  return entries;
+}
+
+// Replay a ledger onto a parsed config. Shallow-first so a parent unset can't
+// wipe a deeper restore that follows it.
+function applyRestore(obj, entries) {
+  const sorted = (entries || []).slice().sort((a, b) => a.pointer.length - b.pointer.length);
+  for (const e of sorted) {
+    if (e.prior === ABSENT) unsetAt(obj, e.pointer);
+    else setAt(obj, e.pointer, clonePrior(e.prior));
+  }
+  return obj;
+}
+
+// WRITE-ONCE, for the same reason snapshots are: a second `on` would otherwise
+// record the already-NeoSmith values as the "prior" state.
+function recordRestore(harnessId, filePath, entries) {
+  const state = readState();
+  state.restore = state.restore || {};
+  state.restore[harnessId] = state.restore[harnessId] || {};
+  if (state.restore[harnessId][filePath]) return false;
+  state.restore[harnessId][filePath] = entries;
+  writeState(state);
+  return true;
+}
+
+function readRestore(harnessId, filePath) {
+  const state = readState();
+  const led = (state.restore && state.restore[harnessId]) || {};
+  return filePath ? (led[filePath] || null) : led;
+}
+
+function clearRestore(harnessId) {
+  const state = readState();
+  if (!state.restore || !state.restore[harnessId]) return;
+  delete state.restore[harnessId];
+  if (!Object.keys(state.restore).length) delete state.restore;
+  writeState(state);
+}
+
 // T4: appendAuditLog is exported so commands (`neosmith log`) and tests can
 // emit events that go through the same funnel. The redaction + write-after
 // contract lives here, so emitting-from-elsewhere is just a call.
@@ -176,8 +305,11 @@ module.exports = {
   HOME, NEOSMITH_DIR, SNAPSHOTS_DIR, CONFIG_FILE, STATE_FILE,
   AUDIT_FILE, DRYRUN_DIR, AUDIT_KEY_PREFIX,
   ensureDir, fileExists, readText, readJSON, writeText, writeJSON,
-  snapshot, restoreSnapshot, clearSnapshot,
+  snapshot, restoreSnapshot, clearSnapshot, snapshotPath, hasSnapshot,
   appendAuditLog,
   readKeyRef, writeKeyRef, clearKeyRef,
   readState, writeState, setHarnessFlag, getHarnessFlag,
+  // Restore ledger (issue #15)
+  ABSENT, getAt, setAt, unsetAt, planRestore, applyRestore,
+  recordRestore, readRestore, clearRestore,
 };

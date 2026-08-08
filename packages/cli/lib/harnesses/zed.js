@@ -60,6 +60,10 @@ function on(ctx) {
   }
 
   io.snapshot("zed", CONFIG);
+  // Ledger the whole openai block: `on` overwrites api_url/api_key and appends
+  // to available_models, so the user's own provider settings can only be put
+  // back wholesale (issue #15 — `off` used to just delete them).
+  io.recordRestore("zed", CONFIG, io.planRestore(existing, [["language_models", "openai"]]));
 
   const next = { ...existing };
   next.language_models = { ...(existing.language_models || {}) };
@@ -89,28 +93,38 @@ function on(ctx) {
 function off(ctx) {
   if (!io.fileExists(CONFIG)) {
     io.clearSnapshot("zed");
+    io.clearRestore("zed");
     ui.log(`${CONFIG} not present — nothing to disconnect.`);
     return { ok: true };
   }
   const restored = io.restoreSnapshot("zed", CONFIG);
   if (!restored) {
-    // Fallback: strip the NeoSmith openai block.
     const cfg = io.readJSON(CONFIG) || {};
-    if (cfg.language_models && cfg.language_models.openai) {
+    const ledger = io.readRestore("zed", CONFIG);
+    if (ledger) {
+      // Replay the ledger: the user's own api_url/api_key/available_models
+      // come back instead of being deleted outright.
+      io.applyRestore(cfg, ledger);
+      if (cfg.language_models && !Object.keys(cfg.language_models).length) delete cfg.language_models;
+    } else if (cfg.language_models && cfg.language_models.openai) {
+      // No ledger (pre-0.8 connect) — strip the NeoSmith openai block.
       const o = cfg.language_models.openai;
       delete o.api_url;
       delete o.api_key;
       if (Array.isArray(o.available_models)) {
         o.available_models = o.available_models.filter((m) =>
           !(m && typeof m.name === "string" && (m.name.startsWith("neosmith.") || (m.display_name || "").startsWith("NeoSmith "))));
+        if (!o.available_models.length) delete o.available_models;
       }
       if (Object.keys(o).length === 0) delete cfg.language_models.openai;
       if (Object.keys(cfg.language_models).length === 0) delete cfg.language_models;
     }
     io.writeJSON(CONFIG, cfg, 0o600);
+    io.clearRestore("zed");
     ui.ok(`Removed NeoSmith keys from ${CONFIG} (no pre-connect snapshot was available).`);
     return { ok: true, partial: true };
   }
+  io.clearRestore("zed");
   ui.ok(`Restored pre-NeoSmith ${CONFIG} from snapshot.`);
   return { ok: true };
 }

@@ -144,6 +144,16 @@ Every command supports `--help`. Run `neosmith help` or `neosmith <harness> help
 
 Every harness supports `on`, `off`, `status`, and `help`. `off` restores your pre-connect configuration — file-based harnesses **byte-for-byte** from a snapshot under `~/.neosmith/snapshots/`, and the UI-driven ones by clearing the on-flag and telling you what to switch back in the IDE.
 
+### Your existing settings are merged, never clobbered
+
+For every file-writable harness:
+
+- **`on` merges.** Variables you defined yourself are left exactly as they are. Only the NeoSmith-owned keys are added or overwritten — including inside list-shaped settings like `claudeCode.environmentVariables`, which is merged **by variable name**, so your own `HTTPS_PROXY` (or anything else) stays put.
+- **The pre-connect snapshot is taken once.** Re-running `on` — to switch tiers with `--model`, or just by accident — refreshes the config but never overwrites the baseline captured the first time. `off` therefore restores what you had *before you ever connected*, not what the previous `on` left behind.
+- **`off` restores, it doesn't just delete.** Alongside the snapshot, `on` records each key's prior value in `~/.neosmith/state.json`. If the snapshot is gone (you cleaned `~/.neosmith`, or moved machines), `off` replays that ledger: your values come back and only the keys NeoSmith introduced are removed.
+
+`npm run smoke` rehearses all of this against a throwaway `HOME` and saves before/wired/after copies you can diff yourself.
+
 ### UI-driven harnesses (Copilot, Cline, JetBrains, Cursor)
 
 Some harnesses don't expose a config file the CLI can write to — their key lives inside the tool's UI or its OS-keychain. For these, `neosmith <harness> on` writes what it can and **prints the remaining manual step**.
@@ -236,7 +246,7 @@ Change tiers any time by re-running `on` with a new `--model`. The CLI updates o
 }
 ```
 
-`on` **merges** into `~/.claude/settings.json` — your existing `permissions`, `hooks`, and MCP config are preserved. The pre-connect file is snapshotted to `~/.neosmith/snapshots/claude.bak` so `off` restores it byte-for-byte. If the **Claude Code IDE extension** is installed in VS Code and/or Cursor, `on` also writes the `claudeCode.*` block (incl. `claudeCode.environmentVariables`) into that editor's `settings.json`, snapshotted/restored the same way. File mode `0600`.
+`on` **merges** into `~/.claude/settings.json` — your existing `permissions`, `hooks`, MCP config, and any env vars of your own are preserved. The pre-connect file is snapshotted to `~/.neosmith/snapshots/claude.bak` so `off` restores it byte-for-byte. If the **Claude Code IDE extension** is installed in VS Code and/or Cursor, `on` also writes the `claudeCode.*` block into that editor's `settings.json`, snapshotted/restored the same way; `claudeCode.environmentVariables` is merged **by variable name**, so entries you added yourself survive. File mode `0600`.
 
 ### Codex
 
@@ -293,7 +303,7 @@ Run `neosmith doctor` first — it gives one sentence per failed harness explain
 | Symptom | Fix |
 |---|---|
 | Tool still uses the old model | Fully restart the harness. In Claude Code, exit and `claude --resume <id>` keeps the resumed session's original config — start a fresh `claude` instead. |
-| `claude off` didn't restore my config | `off` restores from `~/.neosmith/snapshots/claude.bak` (created on first `on`). If you deleted it, `off` still strips the NeoSmith keys; your other settings stay. Re-run `on` then `off` to get a fresh snapshot. |
+| `claude off` didn't restore my config | `off` restores from `~/.neosmith/snapshots/claude.bak` (created on the first `on` and never overwritten by later ones). If you deleted it, `off` falls back to the restore ledger in `~/.neosmith/state.json` and puts your prior values back; your other settings stay either way. |
 | Codex: `400 Unknown model` | Use `neosmith.intelligent-pro`, not a `gpt-*` name. The router only knows NeoSmith SKUs and the Claude family ids. |
 | Continue: `404` or no response | Ensure `apiBase` ends in `/v1` (the CLI does this for you; if you hand-edited `~/.continue/config.yaml`, check that line). |
 | Cline / JetBrains / Cursor: `on` didn't change anything | These are UI-driven — `on` prints the exact values to paste. Look between the `──` banner and the `✓` line, then paste them into the tool's settings UI. |

@@ -12,7 +12,7 @@
 
 const { run } = require("node:test");
 const { spec } = require("node:test/reporters");
-const { Transform } = require("stream");
+const { Writable } = require("stream");
 const fs = require("fs");
 const path = require("path");
 
@@ -23,16 +23,19 @@ const files = fs.readdirSync(path.join(__dirname, "contract"))
   .filter((f) => f.endsWith(".test.js"))
   .map((f) => path.join(__dirname, "contract", f));
 
+// A Writable, not a Transform: nothing reads a Transform's readable side here,
+// so its buffer fills, writes stall, "finish" never fires and the process
+// exits 0 having reported nothing. See the same note in smoke.js.
 let pass = 0, fail = 0;
-const counter = new Transform({
-  transform(chunk, _enc, cb) {
+const counter = new Writable({
+  write(chunk, _enc, cb) {
     const s = chunk.toString();
     process.stdout.write(s);
     for (const line of s.split("\n")) {
       if (/^\s*✔/.test(line)) pass++;
       else if (/^\s*✖/.test(line)) fail++;
     }
-    cb(null, chunk);
+    cb();
   },
 });
 counter.on("finish", () => {

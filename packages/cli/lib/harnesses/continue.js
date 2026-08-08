@@ -50,7 +50,15 @@ function neosmithAutocompleteBlock(key) {
   };
 }
 
-// String fallback: emit a clean NeoSmith block at the top, preserve the rest.
+// Every pointer on() writes into the parsed YAML, for the restore ledger.
+const WRITTEN_POINTERS = [["models"], ["tabAutocompleteModel"]];
+
+// String fallback, used only when the `yaml` dependency is missing so we can't
+// merge structurally. It used to accept `existingText` and never read it —
+// silently destroying the whole config (issue #15). We can't safely merge two
+// YAML documents by hand, so the user's original is preserved verbatim as a
+// commented block: the file stays valid, nothing is lost, and `off` still
+// restores the real thing from the snapshot.
 function stringMerge(existingText, model, key, withAutocomplete) {
   const lines = [];
   lines.push(`name: Local Config`);
@@ -72,6 +80,15 @@ function stringMerge(existingText, model, key, withAutocomplete) {
     lines.push(`  model: ${harness.MODELS.lite}`);
     lines.push(`  apiKey: ${key}`);
   }
+  const prior = (existingText || "").trim();
+  if (prior) {
+    lines.push(``);
+    lines.push(`# ── pre-NeoSmith config (preserved verbatim) ─────────────────────────`);
+    lines.push(`# The \`yaml\` package was unavailable, so this could not be merged`);
+    lines.push(`# structurally. Run \`neosmith continue off\` to restore it, or`);
+    lines.push(`# uncomment the entries you still want.`);
+    for (const l of prior.split("\n")) lines.push(`# ${l}`);
+  }
   return lines.join("\n") + "\n";
 }
 
@@ -92,6 +109,12 @@ function on(ctx) {
     }
     if (!parsed || typeof parsed !== "object") parsed = {};
 
+    // Snapshot + ledger before mutating `parsed`. Both are write-once, so a
+    // second `on` refreshes the entry without losing the pre-connect baseline
+    // (issue #15 — this used to re-snapshot the already-NeoSmith config).
+    io.snapshot("continue", CONFIG);
+    io.recordRestore("continue", CONFIG, io.planRestore(parsed, WRITTEN_POINTERS));
+
     const models = Array.isArray(parsed.models) ? parsed.models.slice() : [];
     // Replace any prior NeoSmith entry; keep others.
     const filtered = models.filter((m) => !(m && m.name === "NeoSmith"));
@@ -103,12 +126,12 @@ function on(ctx) {
       delete parsed.tabAutocompleteModel;
     }
 
-    io.snapshot("continue", CONFIG);
     out = yaml.stringify(parsed);
   } else {
-    ui.warn("`yaml` package not installed — writing a fresh NeoSmith block (your existing config is snapshotted for `off`). Run `npm install` in the CLI dir for a true merge.");
+    ui.warn("`yaml` package not installed — writing a fresh NeoSmith block and preserving your existing config as a comment (and in the snapshot). Run `npm install` in the CLI dir for a true merge.");
     io.snapshot("continue", CONFIG);
     out = stringMerge(existingText, model, key, withAutocomplete);
+    // No parser → no ledger. `off` falls back to the same string surgery.
   }
 
   io.writeText(CONFIG, out, 0o600);
@@ -122,6 +145,7 @@ function on(ctx) {
 function off(ctx) {
   if (!io.fileExists(CONFIG)) {
     io.clearSnapshot("continue");
+    io.clearRestore("continue");
     ui.log(`${CONFIG} not present — nothing to disconnect.`);
     return { ok: true };
   }
@@ -130,11 +154,18 @@ function off(ctx) {
     if (yaml) {
       let parsed = {};
       try { parsed = yaml.parse(io.readText(CONFIG) || "") || {}; } catch { parsed = {}; }
-      if (Array.isArray(parsed.models)) {
-        parsed.models = parsed.models.filter((m) => !(m && m.name === "NeoSmith"));
-      }
-      if (parsed.tabAutocompleteModel && parsed.tabAutocompleteModel.title === "NeoSmith Autocomplete") {
-        delete parsed.tabAutocompleteModel;
+      const ledger = io.readRestore("continue", CONFIG);
+      if (ledger) {
+        // Replay the ledger: the user's own models array / autocomplete model
+        // come back exactly as they were.
+        io.applyRestore(parsed, ledger);
+      } else {
+        if (Array.isArray(parsed.models)) {
+          parsed.models = parsed.models.filter((m) => !(m && m.name === "NeoSmith"));
+        }
+        if (parsed.tabAutocompleteModel && parsed.tabAutocompleteModel.title === "NeoSmith Autocomplete") {
+          delete parsed.tabAutocompleteModel;
+        }
       }
       io.writeText(CONFIG, yaml.stringify(parsed), 0o600);
     } else {
@@ -144,9 +175,11 @@ function off(ctx) {
       text = text.replace(/\n?tabAutocompleteModel:[\s\S]*?(?=\n[a-z]|$)/g, "");
       io.writeText(CONFIG, text + "\n", 0o600);
     }
+    io.clearRestore("continue");
     ui.ok(`Removed NeoSmith entries from ${CONFIG} (no pre-connect snapshot was available).`);
     return { ok: true, partial: true };
   }
+  io.clearRestore("continue");
   ui.ok(`Restored pre-NeoSmith ${CONFIG} from snapshot.`);
   return { ok: true };
 }

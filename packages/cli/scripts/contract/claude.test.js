@@ -1,9 +1,11 @@
 // scripts/contract/claude.test.js
 //
-// T8 contract for claude.js. Encodes the existing behavior — claude is the
-// only harness with the warn-no-op `hasNeoSmith(existing)` short-circuit (see
-// T1 ground truth). Other file-writable harnesses (codex, continue) snapshot
-// on every on() call and do not short-circuit; their tests live separately.
+// T8 contract for claude.js. Encodes the existing behavior — claude is one of
+// the harnesses with the warn-no-op `hasNeoSmith(existing)` short-circuit (see
+// T1 ground truth). codex and continue do not short-circuit; their tests live
+// separately. Since issue #15 every harness takes its pre-connect snapshot
+// only ONCE, so a second `on` can never overwrite the baseline; the
+// user-config preservation contract lives in env-preservation.test.js.
 //
 // Behavior under test (per codex.js:21-60 / harness.js:5-6 / harness.js:21-49):
 //   - on(): if alreadyNeoSmith(existing) → return { alreadyOn: true }, no write
@@ -98,6 +100,21 @@ function editorSettingsPath(home, editor) {
   if (process.platform === "darwin") return path.join(home, "Library", "Application Support", dirName, "User", "settings.json");
   return path.join(home, ".config", dirName, "User", "settings.json");
 }
+
+// The harness and the smoke rehearsal must resolve the editor settings path
+// the same way. They used to keep separate copies of this per-OS switch, and
+// the smoke copy was Windows-only — so on Linux/macOS the rehearsal seeded a
+// file the CLI never wrote to, and its byte-for-byte checks passed vacuously.
+test("claude exports the per-OS editor settings path, resolved under HOME", () => withSandbox((home) => {
+  const { claude } = loadCli();
+  assert.deepEqual(claude.EDITORS, ["vscode", "cursor"]);
+  for (const editor of claude.EDITORS) {
+    const p = claude.editorSettingsPath(editor);
+    assert.equal(p, editorSettingsPath(home, editor),
+      `${editor}: export must match the expected layout for ${process.platform}`);
+    assert.ok(p.startsWith(home), `${editor}: must resolve under the sandbox HOME`);
+  }
+}));
 
 test("claude on wires the IDE extension settings.json when the extension is present", () => withSandbox((home) => {
   const { io, harness, claude } = loadCli();
