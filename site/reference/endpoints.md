@@ -28,6 +28,7 @@ NeoSmith exposes branded model SKUs. Set whichever your agent requires in its `m
 | `neosmith.intelligent-pro` | Opus-tier (**default**) | SLM-first, escalates to Claude Opus on hard tasks / verifier-fail |
 | `neosmith.intelligent-basic` | Sonnet-tier | SLM-first with Sonnet fallback; **no Opus** |
 | `neosmith.intelligent-lite` | Haiku/SLM-only | Lowest cost, SLM-only, no frontier escalation |
+| `neosmith.intelligent-maestro` | Highest-accuracy agentic coding | Fable-tier; top-of-ladder agentic lane |
 
 > Anthropic-style model ids (e.g. `claude-opus-4`) are also accepted for Claude Code compatibility and map to the `intelligent-pro` tier. Unknown model names (e.g. `gpt-4o`) are **rejected** with HTTP 400.
 
@@ -76,7 +77,18 @@ Use this to see which model served the request and whether it escalated to Opus.
 | Variable | Value | Used by |
 |---|---|---|
 | `ANTHROPIC_BASE_URL` | `https://router.neosmith.ai` | Claude Code |
-| `ANTHROPIC_API_KEY` | `sk-plus-yourname-xxxxxx` | Claude Code |
-| `ANTHROPIC_MODEL` | `claude-opus-4` (optional) | Claude Code |
+| `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` | `sk-plus-yourname-xxxxxx` | Claude Code |
+| `ANTHROPIC_MODEL` | `neosmith.intelligent-pro` (default SKU) | Claude Code |
+| `ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU,FABLE}_MODEL` | per-tier NeoSmith SKU (see ladder below) | Claude Code `/model` picker |
+| `ANTHROPIC_DEFAULT_{...}_MODEL_NAME` / `_DESCRIPTION` | branded label + description per tier | Claude Code `/model` picker |
 | `OPENAI_BASE_URL` | `https://router.neosmith.ai/v1` | OpenAI SDK clients, Codex |
 | `OPENAI_API_KEY` | `sk-plus-yourname-xxxxxx` | OpenAI SDK clients, Codex |
+
+**Claude Code per-tier ladder** (written by `neosmith claude on`):
+
+| Slot | SKU | Display name |
+|---|---|---|
+| OPUS | `neosmith.intelligent-pro` | NeoSmith Pro |
+| SONNET | `neosmith.intelligent-basic` | NeoSmith Basic |
+| HAIKU | `neosmith.neolite` | NeoSmith NeoLite |
+| FABLE | `neosmith.intelligent-maestro` | NeoSmith Maestro |

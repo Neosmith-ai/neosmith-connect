@@ -5,18 +5,123 @@
 //   ANTHROPIC_AUTH_TOKEN = <key>                       (accepted alongside ANTHROPIC_API_KEY)
 //   ANTHROPIC_MODEL      = neosmith.intelligent-pro    (mapped via flag --model)
 //
+// In addition to the core connection vars, `on` writes the full per-tier
+// ANTHROPIC_DEFAULT_<SLOT>_MODEL(+_NAME/_DESCRIPTION) ladder so Claude Code's
+// /model picker shows NeoSmith-branded tiers, plus the top-level `model` /
+// `advisorModel` shortcuts. The tier→SKU map lives in harnesses.json
+// (claudeTierMap); the default `model`/`advisorModel` selection derives from
+// the --model flag.
+//
 // MERGE never clobber: pre-existing env, permissions, hooks, MCP config are
 // preserved. `off` restores from the byte-for-byte snapshot taken before `on`.
 
 "use strict";
 
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
 const harness = require("../harness");
 const io = require("../io");
 const ui = require("../ui");
 
 const CONFIG = path.join(io.HOME, ".claude", "settings.json");
+
+// ── Claude Code IDE extension wiring ────────────────────────────────────────
+// In addition to the CLI config (~/.claude/settings.json), we detect the
+// Anthropic Claude Code extension in installed VS Code-family editors and wire
+// the editor's settings.json `claudeCode.*` block. The extension reads these —
+// notably `claudeCode.environmentVariables`, which the extension injects into
+// the model process. This mirrors the hand-tuned config users maintain.
+//
+// Each editor's settings.json is snapshot/restored independently so `off`
+// returns it byte-for-byte.
+const CLAUDE_EXT_PREFIX = "anthropic.claude-code";
+
+// Build the claudeCode.* keys for one editor, from the same tier map + key that
+// we write into ~/.claude/settings.json.
+function claudeCodeEditorSettings(key, tierMap) {
+  const envVars = [
+    { name: "ANTHROPIC_BASE_URL", value: harness.ROUTER_URL },
+    { name: "ANTHROPIC_API_KEY", value: key },
+    { name: "CLAUDE_CODE_USE_BEDROCK", value: "0" },
+    { name: "CLAUDE_CODE_USE_VERTEX", value: "0" },
+  ];
+  for (const t of Object.keys(tierMap)) {
+    const e = tierMap[t];
+    envVars.push({ name: `ANTHROPIC_DEFAULT_${e.slot}_MODEL`, value: e.model });
+    envVars.push({ name: `ANTHROPIC_DEFAULT_${e.slot}_MODEL_NAME`, value: e.name });
+    envVars.push({ name: `ANTHROPIC_DEFAULT_${e.slot}_MODEL_DESCRIPTION`, value: e.description });
+  }
+  return {
+    "claudeCode.preferredLocation": "panel",
+    "claudeCode.disableLoginPrompt": true,
+    "claudeCode.environmentVariables": envVars,
+  };
+}
+
+function claudeCodeEditorKeys() {
+  return [
+    "claudeCode.preferredLocation",
+    "claudeCode.disableLoginPrompt",
+    "claudeCode.environmentVariables",
+  ];
+}
+
+// Discover installed VS Code-family editors that have the Claude Code
+// extension. Returns [{ editor, settingsPath }]. Detection is by the extension
+// dir under ~/.<editor>/extensions/anthropic.claude-code-*.
+function detectEditorsWithClaudeExt() {
+  const home = io.HOME;
+  const roaming = process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming");
+  const candidates = [
+    { editor: "vscode", dir: "Code", settingsDir: path.join(roaming, "Code", "User") },
+    { editor: "cursor", dir: "Cursor", settingsDir: path.join(roaming, "Cursor", "User") },
+  ];
+  if (process.platform === "darwin") {
+    candidates[0].settingsDir = path.join(home, "Library", "Application Support", "Code", "User");
+    candidates[1].settingsDir = path.join(home, "Library", "Application Support", "Cursor", "User");
+  } else if (process.platform !== "win32") {
+    candidates[0].settingsDir = path.join(home, ".config", "Code", "User");
+    candidates[1].settingsDir = path.join(home, ".config", "Cursor", "User");
+  }
+
+  const found = [];
+  for (const c of candidates) {
+    const extRoot = path.join(home, `.${c.editor === "vscode" ? "vscode" : c.editor}`, "extensions");
+    let present = false;
+    try {
+      present = fs.readdirSync(extRoot).some((n) => n.toLowerCase().startsWith(CLAUDE_EXT_PREFIX));
+    } catch { /* no extensions dir → editor not installed */ }
+    if (present) found.push({ editor: c.editor, settingsPath: path.join(c.settingsDir, "settings.json") });
+  }
+  return found;
+}
+
+// Write the claudeCode.* block into one editor's settings.json (snapshot first).
+function wireEditor(editor, settingsPath, key, tierMap) {
+  io.ensureDir(path.dirname(settingsPath));
+  const existing = io.readJSON(settingsPath) || {};
+  const already = existing["claudeCode.environmentVariables"] &&
+    JSON.stringify(existing["claudeCode.environmentVariables"]).includes("router.neosmith.ai");
+  if (already) return { editor, alreadyOn: true };
+  io.snapshot(`claude-ext-${editor}`, settingsPath);
+  const next = { ...existing, ...claudeCodeEditorSettings(key, tierMap) };
+  io.writeJSON(settingsPath, next, 0o600);
+  return { editor, wrote: true, settingsPath };
+}
+
+// Undo one editor's claudeCode.* block (restore snapshot, else strip keys).
+function unwireEditor(editor, settingsPath) {
+  if (!io.fileExists(settingsPath)) { io.clearSnapshot(`claude-ext-${editor}`); return { editor, ok: true, missing: true }; }
+  const restored = io.restoreSnapshot(`claude-ext-${editor}`, settingsPath);
+  if (!restored) {
+    const cfg = io.readJSON(settingsPath) || {};
+    for (const k of claudeCodeEditorKeys()) delete cfg[k];
+    io.writeJSON(settingsPath, cfg, 0o600);
+    return { editor, ok: true, partial: true };
+  }
+  return { editor, ok: true };
+}
 
 function hasNeoSmith(s) {
   // Detection keys on the router URL or the canonical NeoSmith auth-token env
@@ -57,47 +162,156 @@ function on(ctx) {
   next.env.ANTHROPIC_AUTH_TOKEN = key;     // canonical NeoSmith var per developer-guide
   next.env.ANTHROPIC_MODEL = model;       // neosmith.intelligent-pro by default
 
+  // Full per-tier model ladder + branded display names/descriptions, so the
+  // /model picker and status lines show NeoSmith SKUs instead of Anthropic ids.
+  const tierMap = (harness.manifest() || {}).claudeTierMap || {};
+  for (const t of Object.keys(tierMap)) {
+    const entry = tierMap[t];
+    const slot = entry.slot;
+    next.env[`ANTHROPIC_DEFAULT_${slot}_MODEL`] = entry.model;
+    next.env[`ANTHROPIC_DEFAULT_${slot}_MODEL_NAME`] = entry.name;
+    next.env[`ANTHROPIC_DEFAULT_${slot}_MODEL_DESCRIPTION`] = entry.description;
+  }
+
+  // Top-level defaults. `model` follows the requested --model tier (mapped to
+  // the picker slot name); advisorModel defaults to opus.
+  next.model = slotNameForModel(model, tierMap) || "opus";
+  if (!next.advisorModel) next.advisorModel = "opus";
+
   io.writeJSON(CONFIG, next, 0o600);
   ui.ok(`Wrote ${CONFIG}`);
-  return { wrote: true };
+
+  // ── IDE extension wiring ────────────────────────────────────────────────
+  // Detect the Claude Code extension in installed editors and write the
+  // claudeCode.* block (incl. environmentVariables) into that editor's
+  // settings.json so the extension's model process picks up NeoSmith too.
+  const editors = detectEditorsWithClaudeExt();
+  const wiredEditors = [];
+  if (editors.length === 0) {
+    ui.log(ui.c("dim", "No Claude Code IDE extension detected in VS Code/Cursor — only the CLI was configured."));
+  } else {
+    for (const ed of editors) {
+      const r = wireEditor(ed.editor, ed.settingsPath, key, tierMap);
+      if (r.alreadyOn) {
+        ui.log(ui.c("dim", `${ed.editor} settings.json already points at NeoSmith (claudeCode.* present).`));
+      } else if (r.wrote) {
+        wiredEditors.push(ed.editor);
+        ui.ok(`Wired Claude Code extension in ${ed.editor} → ${ed.settingsPath}`);
+      }
+    }
+    if (wiredEditors.length) {
+      ui.log(ui.c("dim", `Reload the ${wiredEditors.join("/")} window (or fully restart) for the extension to pick up NeoSmith.`));
+    }
+  }
+
+  return { wrote: true, editors: wiredEditors };
+}
+
+// Map a resolved NeoSmith SKU (e.g. neosmith.intelligent-pro) back to the
+// picker slot name (opus/sonnet/haiku/fable) using the tier map.
+function slotNameForModel(model, tierMap) {
+  for (const slotName of Object.keys(tierMap)) {
+    if (tierMap[slotName].model === model) return slotName;
+  }
+  return null;
+}
+
+// Env / top-level keys that on() writes, used by off()'s fallback strip.
+function neoEnvKeys(tierMap) {
+  const keys = [
+    "ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY", "ANTHROPIC_MODEL",
+  ];
+  for (const t of Object.keys(tierMap)) {
+    const slot = tierMap[t].slot;
+    keys.push(
+      `ANTHROPIC_DEFAULT_${slot}_MODEL`,
+      `ANTHROPIC_DEFAULT_${slot}_MODEL_NAME`,
+      `ANTHROPIC_DEFAULT_${slot}_MODEL_DESCRIPTION`,
+    );
+  }
+  return keys;
 }
 
 function off(ctx) {
   if (!io.fileExists(CONFIG)) {
     io.clearSnapshot("claude");
     ui.log(`${CONFIG} not present — nothing to disconnect.`);
-    return { ok: true };
+    const unwired = unwireAllEditors();
+    return { ok: true, editors: unwired };
   }
+  let unwired = [];
   const restored = io.restoreSnapshot("claude", CONFIG);
   if (!restored) {
     // No snapshot — strip NeoSmith keys as a fallback.
     const cfg = io.readJSON(CONFIG) || {};
     const env = cfg.env || {};
-    delete env.ANTHROPIC_BASE_URL;
-    delete env.ANTHROPIC_AUTH_TOKEN;
-    delete env.ANTHROPIC_API_KEY; // in case user pre-configured it for us.
-    delete env.ANTHROPIC_MODEL;
+    const tierMap = (harness.manifest() || {}).claudeTierMap || {};
+    for (const k of neoEnvKeys(tierMap)) delete env[k];
     if (Object.keys(env).length === 0) delete cfg.env;
+    else cfg.env = env;
+    // Strip the top-level defaults only if they point at a NeoSmith tier slot.
+    if (typeof cfg.model === "string" && Object.prototype.hasOwnProperty.call(tierMap, cfg.model)) delete cfg.model;
+    if (typeof cfg.advisorModel === "string" && Object.prototype.hasOwnProperty.call(tierMap, cfg.advisorModel)) delete cfg.advisorModel;
     io.writeJSON(CONFIG, cfg, 0o600);
     ui.ok(`Removed NeoSmith keys from ${CONFIG} (no pre-connect snapshot was available).`);
-    return { ok: true, partial: true };
+    unwired = unwireAllEditors();
+    return { ok: true, partial: true, editors: unwired };
   }
   ui.ok(`Restored pre-NeoSmith ${CONFIG} from snapshot.`);
-  return { ok: true };
+  unwired = unwireAllEditors();
+  return { ok: true, editors: unwired };
+}
+
+// Restore every editor we may have wired (whether or not the extension is still
+// installed — a stale snapshot is still restored).
+function unwireAllEditors() {
+  const done = [];
+  for (const editor of ["vscode", "cursor"]) {
+    const roaming = process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming");
+    let settingsDir;
+    if (process.platform === "darwin") settingsDir = path.join(io.HOME, "Library", "Application Support", editor === "vscode" ? "Code" : "Cursor", "User");
+    else if (process.platform === "win32") settingsDir = path.join(roaming, editor === "vscode" ? "Code" : "Cursor", "User");
+    else settingsDir = path.join(io.HOME, ".config", editor === "vscode" ? "Code" : "Cursor", "User");
+    const settingsPath = path.join(settingsDir, "settings.json");
+    const bak = path.join(io.SNAPSHOTS_DIR, `claude-ext-${editor}.bak`);
+    // Only act if we actually wired this editor (snapshot exists) — otherwise
+    // leave a hand-configured editor untouched.
+    if (io.fileExists(bak) || (io.fileExists(settingsPath) && editorWiredToNeo(settingsPath))) {
+      unwireEditor(editor, settingsPath);
+      done.push(editor);
+      ui.ok(`Restored ${editor} settings.json (claudeCode.* removed).`);
+    }
+  }
+  return done;
+}
+
+function editorWiredToNeo(settingsPath) {
+  const cfg = io.readJSON(settingsPath) || {};
+  const ev = cfg["claudeCode.environmentVariables"];
+  return !!ev && JSON.stringify(ev).includes("router.neosmith.ai");
 }
 
 function status(ctx) {
   const cfg = io.fileExists(CONFIG) ? io.readJSON(CONFIG) : null;
-  if (!cfg) return { on: false, detail: `${CONFIG} does not exist` };
-  const env = cfg.env || {};
+  const env = (cfg && cfg.env) || {};
   const neosmith = env.ANTHROPIC_AUTH_TOKEN || env.ANTHROPIC_API_KEY || env.ANTHROPIC_BASE_URL;
-  if (!neosmith) return { on: false, detail: "no Anthropic env keys present" };
   const pointingAtNeo = (env.ANTHROPIC_BASE_URL || "").includes("router.neosmith.ai");
+  const cliOn = !!(cfg && neosmith && pointingAtNeo);
+
+  // Which editors have the extension wired to NeoSmith?
+  const editors = detectEditorsWithClaudeExt();
+  const wiredEditors = editors.filter((e) => editorWiredToNeo(e.settingsPath)).map((e) => e.editor);
+  const extNote = editors.length === 0
+    ? "no Claude Code IDE extension detected"
+    : (wiredEditors.length ? `ext wired: ${wiredEditors.join(",")}` : `ext detected (${editors.map((e) => e.editor).join(",")}) but not wired`);
+
+  if (!cfg) return { on: false, detail: `${CONFIG} does not exist · ${extNote}` };
+  if (!neosmith) return { on: false, detail: `no Anthropic env keys present · ${extNote}` };
   return {
-    on: pointingAtNeo,
-    detail: pointingAtNeo
-      ? `model=${env.ANTHROPIC_MODEL || "(unset)"} base=${env.ANTHROPIC_BASE_URL}`
-      : `pointing at non-NeoSmith backend: ${env.ANTHROPIC_BASE_URL || "(base unset)"}`,
+    on: cliOn,
+    detail: cliOn
+      ? `model=${env.ANTHROPIC_MODEL || "(unset)"} base=${env.ANTHROPIC_BASE_URL} · ${extNote}`
+      : `pointing at non-NeoSmith backend: ${env.ANTHROPIC_BASE_URL || "(base unset)"} · ${extNote}`,
   };
 }
 
@@ -105,12 +319,17 @@ function help() {
   return [
     `Claude Code — Anthropic Messages API.`,
     `Wires: ~/.claude/settings.json (merges, never clobbers your hooks / permissions / MCP).`,
+    `  • connection vars (ANTHROPIC_BASE_URL / AUTH_TOKEN / MODEL)`,
+    `  • branded per-tier ladder (ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU,FABLE}_*)`,
+    `  • top-level model / advisorModel`,
+    `Also auto-detects the Claude Code IDE extension (VS Code / Cursor) and wires`,
+    `the editor's settings.json claudeCode.* block so the extension uses NeoSmith too.`,
     `Key storage: ANTHROPIC_AUTH_TOKEN in settings.json (mode 0600).`,
     ``,
     `Examples:`,
     `  neosmith claude on`,
-    `  neosmith claude on --model neosmith.intelligent-basic`,
-    `  neosmith claude off        # restores the byte-for-byte pre-connect config from snapshot`,
+    `  neosmith claude on --model neosmith.intelligent-maestro`,
+    `  neosmith claude off        # restores CLI + editor configs byte-for-byte from snapshots`,
     `  neosmith claude status`,
   ].join("\n");
 }

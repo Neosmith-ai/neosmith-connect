@@ -23,6 +23,7 @@ function top() {
   ui.log("  " + ui.c("cyan", "neosmith status") + "                Show all harnesses + stored key");
   ui.log("  " + ui.c("cyan", "neosmith verify") + "                Hit /whoami with the stored key");
   ui.log("  " + ui.c("cyan", "neosmith doctor") + "               Per-harness live protocol check + audit-log integrity");
+  ui.log("  " + ui.c("cyan", "neosmith models") + "                List available NeoSmith model SKUs");
   ui.log("  " + ui.c("cyan", "neosmith setup") + "                Detect installed tools, wire selected, run doctor");
   ui.log("  " + ui.c("cyan", "neosmith reset [--all]") + "         Disconnect every harness (clears key; --keep-audit to keep log)");
   ui.log("  " + ui.c("cyan", "neosmith uninstall") + "             Disconnect all + remove ~/.neosmith");
@@ -32,7 +33,7 @@ function top() {
   ui.log("  " + harness.idsSorted().join(" · "));
   ui.log("");
   ui.log(ui.c("bold", "Options for `on`"));
-  ui.log("  --model <sku>     neosmith.intelligent-pro (default) | -basic | -lite");
+  ui.log("  --model <sku>     neosmith.intelligent-pro (default) | -basic | -lite | -maestro");
   ui.log("  --autocomplete    (continue only) also route inline completions via -lite");
   ui.log("  --key <key>       use this key instead of the stored one");
   ui.log("  --dry-run         (global) print what would be written without touching disk");

@@ -41,6 +41,7 @@ function resolveModel(flag, models) {
   if (["pro", "opus", "neosmith.intelligent-pro", "claude-opus-4", "claude-opus-4-8"].includes(lower)) return models.pro;
   if (["basic", "sonnet", "neosmith.intelligent-basic", "claude-sonnet-4-6"].includes(lower)) return models.basic;
   if (["lite", "haiku", "neosmith.intelligent-lite", "claude-haiku-4", "claude-haiku-4-5"].includes(lower)) return models.lite;
+  if (models.maestro && ["maestro", "fable", "neosmith.intelligent-maestro", "claude-fable-5"].includes(lower)) return models.maestro;
   // Already looks like a NeoSmith SKU — pass through.
   if (flag.startsWith("neosmith.")) return flag;
   return flag;

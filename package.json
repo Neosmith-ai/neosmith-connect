@@ -10,7 +10,10 @@
     "scaffold": "node tools/scaffold-monorepo.js",
     "generate-docs": "node scripts/generate-docs.js",
     "sync-docs": "node scripts/sync-docs-mirror.js",
-    "test": "node --test packages/cli/scripts/contract/**/*.test.js"
+    "test": "node --test packages/cli/scripts/contract/**/*.test.js",
+    "smoke": "npm --workspace packages/cli run smoke",
+    "smoke:ci": "npm --workspace packages/cli run smoke:ci",
+    "install-hook": "npm --workspace packages/cli run install-hook"
   },
   "engines": {
     "node": ">=18"

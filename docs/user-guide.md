@@ -246,7 +246,7 @@ Then assign models per feature (Settings → Tools → AI Assistant → Models):
 | **Cline** | no | **yes — paste into Cline's settings UI** | Cline extension internal state |
 | **JetBrains AI** | no | **yes — paste into IDE Settings** | IDE internal storage |
 | Zed | yes (`~/.config/zed/settings.json`, 0600) | none | config file literal |
-| Cursor | yes (`Cursor/User/settings.json`, 0600) | none | config file literal |
+| **Cursor** | no | **yes — paste into Settings → Models (needs Cursor Pro/Ultra)** | Cursor's encrypted, server-synced BYOK store (not settings.json) |
 
 The "Manual step?" column is the one that breaks first. Run `neosmith doctor` after the manual step — if a row says `models-written` (Copilot) or `UI-configured model=…` (Cline, JetBrains), you're fine; if it says anything else, the key didn't actually land in the tool's store.
 
@@ -280,14 +280,15 @@ The default tier (`pro` / Opus-tier) routes cheap work to a distilled model and 
 | Pro (default) | *(nothing)* | SLM-first, escalates to Opus on hard tasks |
 | Basic / Sonnet | `--model neosmith.intelligent-basic` | SLM-first with Sonnet fallback, **no Opus** |
 | Lite / SLM-only | `--model neosmith.intelligent-lite` | Lowest cost, no frontier escalation |
+| Maestro / Fable | `--model neosmith.intelligent-maestro` | Highest-accuracy agentic coding lane |
 
 Examples:
 
 ```bash
 neosmith claude on --model basic       # Sonnet-tier
 neosmith claude on --model lite        # SLM-only
+neosmith claude on --model maestro     # Fable-tier, highest-accuracy agentic
 neosmith claude on --model claude-opus-4   # force Opus, no escalation
-neutered form:                          neosmith claude on --model opus
 ```
 
 You can change tiers any time by re-running `on` with a new `--model`. The CLI updates only the model line; your other settings stay.
@@ -305,7 +306,7 @@ You can change tiers any time by re-running `on` with a new `--model`. The CLI u
 | 5 | **JetBrains AI** | *(none — JetBrains stores in IDE settings)* | Yes — paste into **Settings → Tools → AI Assistant → Providers & API Keys** |
 | 6 | **Copilot Chat** | VS Code `chatLanguageModels.json` (key in OS-keychain) | Yes — reload window |
 | 7 | **Zed** | `~/.config/zed/settings.json` (0600) | Yes — restart Zed |
-| 8 | **Cursor** | VS Code settings (`cursor.models.*`) | Yes — reload window |
+| 8 | **Cursor** | *(none — native BYOK is UI-only, needs Cursor Pro/Ultra)* `on` prints the Settings → Models paste-in values | Yes — enter in Cursor → Settings → Models; for a scriptable path use `neosmith claude on` + the Claude Code extension |
 
 Use `neosmith <harness> help` for per-harness notes (e.g. `--autocomplete` is a Continue-only flag).
 

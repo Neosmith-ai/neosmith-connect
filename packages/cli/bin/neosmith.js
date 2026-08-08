@@ -35,6 +35,7 @@ const commands = {
   setup: require("../lib/commands/setup"),
   reset: require("../lib/commands/reset"),
   uninstall: require("../lib/commands/uninstall"),
+  models: require("../lib/commands/models"),
   help: require("../lib/commands/help"),
 };
 
@@ -86,6 +87,7 @@ async function main() {
     case "reset":   return commands.reset.run(args);
     case "status":  return commands.status.run(args);
     case "uninstall": return commands.uninstall.run(args);
+    case "models":  return commands.models.run(args);
     case "help":    return commands.help.run(args);
     case "init":    // back-compat: init <key> → login <key> + claude on
       return compatInit(args);

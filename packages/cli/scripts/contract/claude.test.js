@@ -46,6 +46,87 @@ test("claude on writes env keys to settings.json", () => withSandbox((home) => {
   assert.equal(parsed.env.ANTHROPIC_MODEL, "neosmith.intelligent-pro");
 }));
 
+test("claude on writes the full per-tier model ladder + display names + top-level defaults", () => withSandbox((home) => {
+  const { io, harness, claude } = loadCli();
+  const cfg = path.join(home, ".claude", "settings.json");
+  claude.on({ key: "sk-plus-test-aaaaaaaaaaaa", model: harness.resolveModel("pro") });
+
+  const parsed = io.readJSON(cfg);
+  const env = parsed.env;
+  // Per-tier model + branded name + description for all four slots.
+  assert.equal(env.ANTHROPIC_DEFAULT_OPUS_MODEL, "neosmith.intelligent-pro");
+  assert.equal(env.ANTHROPIC_DEFAULT_OPUS_MODEL_NAME, "NeoSmith Pro");
+  assert.equal(env.ANTHROPIC_DEFAULT_SONNET_MODEL, "neosmith.intelligent-basic");
+  assert.equal(env.ANTHROPIC_DEFAULT_HAIKU_MODEL, "neosmith.neolite");
+  assert.equal(env.ANTHROPIC_DEFAULT_FABLE_MODEL, "neosmith.intelligent-maestro");
+  assert.ok(env.ANTHROPIC_DEFAULT_FABLE_MODEL_DESCRIPTION, "fable description present");
+  // Top-level defaults derived from the requested model (pro → opus slot).
+  assert.equal(parsed.model, "opus");
+  assert.equal(parsed.advisorModel, "opus");
+}));
+
+test("claude on --model maestro maps model slot to fable and writes maestro SKU", () => withSandbox((home) => {
+  const { io, harness, claude } = loadCli();
+  const cfg = path.join(home, ".claude", "settings.json");
+  claude.on({ key: "sk-plus-test-aaaaaaaaaaaa", model: harness.resolveModel("maestro") });
+  const parsed = io.readJSON(cfg);
+  assert.equal(parsed.env.ANTHROPIC_MODEL, "neosmith.intelligent-maestro");
+  assert.equal(parsed.model, "fable");
+}));
+
+test("claude off fallback strips the tier ladder + top-level defaults when no snapshot", () => withSandbox((home) => {
+  const { io, harness, claude } = loadCli();
+  const cfg = path.join(home, ".claude", "settings.json");
+  claude.on({ key: "sk-plus-test-aaaaaaaaaaaa", model: harness.resolveModel("pro") });
+  // Remove the snapshot so off() takes the strip-fallback path.
+  io.clearSnapshot("claude");
+  claude.off({});
+  const parsed = io.readJSON(cfg);
+  const env = parsed.env || {};
+  assert.ok(!env.ANTHROPIC_AUTH_TOKEN, "auth token stripped");
+  assert.ok(!env.ANTHROPIC_DEFAULT_OPUS_MODEL, "opus tier stripped");
+  assert.ok(!env.ANTHROPIC_DEFAULT_FABLE_MODEL, "fable tier stripped");
+  assert.ok(!parsed.model, "top-level model stripped");
+  assert.ok(!parsed.advisorModel, "top-level advisorModel stripped");
+}));
+
+test("claude on wires the IDE extension settings.json when the extension is present", () => withSandbox((home) => {
+  const { io, harness, claude } = loadCli();
+  // Simulate VS Code with the Claude Code extension installed.
+  const extDir = path.join(home, ".vscode", "extensions", "anthropic.claude-code-2.1.0-win32-x64");
+  fs.mkdirSync(extDir, { recursive: true });
+  const editorSettings = path.join(home, "Code", "User", "settings.json"); // APPDATA=sandbox
+  io.ensureDir(path.dirname(editorSettings));
+  fs.writeFileSync(editorSettings, JSON.stringify({ "editor.fontSize": 14 }, null, 2) + "\n");
+
+  claude.on({ key: "sk-plus-test-bbbbbbbbbbbb", model: harness.resolveModel("pro") });
+
+  const parsed = io.readJSON(editorSettings);
+  assert.equal(parsed["editor.fontSize"], 14, "pre-existing editor settings preserved");
+  assert.equal(parsed["claudeCode.preferredLocation"], "panel");
+  assert.equal(parsed["claudeCode.disableLoginPrompt"], true);
+  const ev = parsed["claudeCode.environmentVariables"];
+  assert.ok(Array.isArray(ev), "environmentVariables array written");
+  const byName = Object.fromEntries(ev.map((e) => [e.name, e.value]));
+  assert.equal(byName.ANTHROPIC_BASE_URL, "https://router.neosmith.ai");
+  assert.equal(byName.ANTHROPIC_API_KEY, "sk-plus-test-bbbbbbbbbbbb");
+  assert.equal(byName.CLAUDE_CODE_USE_BEDROCK, "0");
+  assert.equal(byName.ANTHROPIC_DEFAULT_FABLE_MODEL, "neosmith.intelligent-maestro");
+
+  // off() restores the editor settings byte-for-byte.
+  claude.off({});
+  assert.equal(fs.readFileSync(editorSettings, "utf8"), JSON.stringify({ "editor.fontSize": 14 }, null, 2) + "\n",
+    "editor settings.json restored byte-for-byte after off");
+}));
+
+test("claude on without the extension leaves editors untouched and reports none", () => withSandbox((home) => {
+  const { io, harness, claude } = loadCli();
+  const editorSettings = path.join(home, "Code", "User", "settings.json");
+  const res = claude.on({ key: "sk-plus-test-cccccccccccc", model: harness.resolveModel("pro") });
+  assert.deepEqual(res.editors, [], "no editors wired when extension absent");
+  assert.ok(!io.fileExists(editorSettings), "no editor settings.json created when extension absent");
+}));
+
 test("claude on is warn-no-op on the second call (no double-write)", () => withSandbox((home) => {
   const { io, claude } = loadCli();
   const cfg = path.join(home, ".claude", "settings.json");

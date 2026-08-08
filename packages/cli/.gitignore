@@ -10,3 +10,6 @@ node_modules/
 .install-sandbox/
 .install-sandbox2/
 .install-sandbox3/
+
+# Smoke-run artifacts (npm run smoke)
+.smoke/
