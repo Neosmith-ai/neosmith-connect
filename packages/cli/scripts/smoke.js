@@ -20,6 +20,9 @@
 "use strict";
 
 const { spawnSync } = require("child_process");
+const { run: runTests } = require("node:test");
+const { spec: specReporter } = require("node:test/reporters");
+const { Transform } = require("stream");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -39,24 +42,41 @@ function mkdir(p) { fs.mkdirSync(p, { recursive: true }); return p; }
 function write(p, s) { mkdir(path.dirname(p)); fs.writeFileSync(p, s); }
 
 // ── 1. contract suite ───────────────────────────────────────────────────────
+// Uses the node:test run() API with an explicit glob, so ONLY *.test.js files
+// run (helpers like _sandbox.js / _mock_server.js are excluded) on every
+// supported Node (18/20/22/24) and OS. run() returns a TapStream; we render it
+// with the spec reporter into both the console and the report file, and count
+// pass/fail from the stream events.
 function runContractSuite(reportPath) {
-  const tests = fs.readdirSync(CONTRACT_DIR)
-    .filter((f) => f.endsWith(".test.js"))
-    .map((f) => path.join(CONTRACT_DIR, f));
-  log(`\n▶ Running ${tests.length} contract files (node --test, verbose)…`);
+  const glob = path.join(CONTRACT_DIR, "*.test.js");
+  log(`\n▶ Running contract suite (node:test run API, glob ${path.relative(PKG, glob)})…`);
 
-  const res = spawnSync(
-    process.execPath,
-    ["--test", "--test-reporter=spec", ...tests],
-    { cwd: PKG, encoding: "utf8", env: { ...process.env } },
-  );
-  const text = (res.stdout || "") + "\n" + (res.stderr || "");
-  write(reportPath, text);
-
-  const pass = (text.match(/✔/g) || []).length;
-  const fail = (text.match(/✖/g) || []).length;
-  // node --test exits non-zero if any test failed.
-  return { pass, fail, ok: res.status === 0 && fail === 0, text };
+  return new Promise((resolve) => {
+    const stream = runTests({ glob, concurrency: true });
+    let buf = "";
+    // Parse the rendered spec/TAP text: top-level "✔ name"/"✖ name" (and the
+    // "not ok" TAP form) mark leaf test results. Counting the rendered lines
+    // is version-robust (the run-stream's event timing is not).
+    let pass = 0, fail = 0;
+    const counter = new Transform({
+      transform(chunk, _enc, cb) {
+        const s = chunk.toString();
+        buf += s;
+        if (!QUIET) process.stdout.write(s);
+        for (const line of s.split("\n")) {
+          if (/^\s*✔/.test(line)) pass++;
+          else if (/^\s*✖/.test(line)) fail++;
+        }
+        cb(null, chunk);
+      },
+    });
+    counter.on("finish", () => {
+      write(reportPath, buf);
+      resolve({ pass, fail, ok: fail === 0, text: buf });
+    });
+    stream.on("error", (err) => { buf += "\nSTREAM ERROR: " + (err && err.message) + "\n"; });
+    stream.compose(specReporter()).pipe(counter);
+  });
 }
 
 // ── 2. isolated claude on/off rehearsal ─────────────────────────────────────
@@ -138,7 +158,7 @@ function runRehearsal(dir) {
 }
 
 // ── 3. assemble + report ────────────────────────────────────────────────────
-function main() {
+async function main() {
   const stamp = new Date().toISOString().replace(/[:.]/g, "-").replace("T", "_").slice(0, 19);
   const dir = mkdir(path.join(OUT_ROOT, stamp));
   mkdir(path.join(dir, "home"));
@@ -146,7 +166,7 @@ function main() {
   log("NeoSmith CLI · smoke");
   log(`artifacts → ${dir}`);
 
-  const contract = runContractSuite(path.join(dir, "contract-tests.txt"));
+  const contract = await runContractSuite(path.join(dir, "contract-tests.txt"));
   const rehearsal = runRehearsal(dir);
 
   // Human-readable summary.

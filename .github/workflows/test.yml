@@ -44,12 +44,12 @@ jobs:
           done
         shell: bash
 
-      - name: Contract test suite (all *.test.js, globbed so new files run automatically)
+      - name: Contract test suite
         working-directory: packages/cli
-        # Glob so a newly-added contract test can't be silently skipped by a
-        # stale explicit list. Quoted so bash passes the glob through to Node.
-        run: node --test "scripts/contract/*.test.js"
-        shell: bash
+        # scripts/run-contract.js runs every scripts/contract/*.test.js via the
+        # node:test run() API and exits non-zero on failure — portable across
+        # Node 18/20/22/24 and all OSes. New test files run automatically.
+        run: node scripts/run-contract.js
 
       - name: Smoke gate (contract suite + isolated claude on/off rehearsal)
         working-directory: packages/cli
