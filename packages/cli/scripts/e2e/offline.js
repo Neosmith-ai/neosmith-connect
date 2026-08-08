@@ -65,7 +65,7 @@ function startMock() {
   try {
     for (const h of HARNESSES) {
       const r = spawnSync(process.execPath, [
-        RUN, "--harness", h, "--env", "local", "--cli-script", CLI,
+        RUN, "--harness", h, "--env", "local", "--mock", "--cli-script", CLI,
       ], {
         encoding: "utf8",
         env: { ...process.env, NEOSMITH_E2E_KEY: process.env.NEOSMITH_E2E_KEY || "sk-slm-offline-e2e-000" },

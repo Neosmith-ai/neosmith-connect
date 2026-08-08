@@ -245,14 +245,19 @@ if (!ENV_DEF) {
 // frontier model, so a CI bug cannot produce a frontier-priced bill.
 const SMOKE_MODEL = contract.skus.cheapestForSmoke;
 
-// A real prompt is only meaningful against a real router. Against the offline
-// contract mock the config assertions still run — that is the point of being
-// able to rehearse locally — but a canned response proves nothing about
-// inference, so the prompt step is reported as skipped rather than failed.
-const PROMPTS_ARE_REAL = !args.mock && args.env !== "local";
+// A real prompt is only meaningful against a real router. `--mock` says the
+// other end is the contract fake: the config assertions still run — that is
+// the point of being able to rehearse locally — but a canned response proves
+// nothing about inference, so the prompt step is reported as skipped.
+//
+// Gated on --mock and NOT on the environment name: `--env local` against a
+// router you actually booted on :4008 is a real router, and running the full
+// prompt path against it is exactly the loop that lets a router change and a
+// CLI change be tested together before either is deployed.
+const PROMPTS_ARE_REAL = !args.mock;
 function skipPrompt(id) {
-  record(`${id}: real prompt (skipped — env=${args.env} is not a live router)`, true,
-    "run with --env staging for the real round-trip");
+  record(`${id}: real prompt (skipped — --mock, the router is a fake)`, true,
+    "drop --mock, or use --env staging, for the real round-trip");
 }
 
 function login() {
