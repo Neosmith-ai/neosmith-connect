@@ -11,8 +11,12 @@
 const https = require("https");
 const http = require("http");
 const { URL } = require("url");
+const envMod = require("./env");
 
-const DEFAULT_ROUTER = process.env.NEOSMITH_BASE_URL || "https://router.neosmith.ai";
+// Lazy — see the note on harness.ROUTER_URL. Resolved on first read so `--env`
+// is already stripped from argv. Every caller reads `http.DEFAULT_ROUTER` as a
+// property access; do not destructure it.
+function defaultRouter() { return envMod.current().baseUrl; }
 
 function clientFor(url) {
   return url.protocol === "http:" ? http : https;
@@ -56,7 +60,7 @@ function post(url, headers, body, timeoutMs = 15000) {
 
 // GET /whoami with the NeoSmith key. Returns parsed identity or throws.
 async function whoami(routerUrl, apiKey) {
-  const base = routerUrl || DEFAULT_ROUTER;
+  const base = routerUrl || defaultRouter();
   const resp = await get(`${base}/whoami`, { Authorization: `Bearer ${apiKey}` });
   let data = {};
   try { data = JSON.parse(resp.body); } catch { data = {}; }
@@ -66,7 +70,7 @@ async function whoami(routerUrl, apiKey) {
 // Verify probe against the Anthropic Messages endpoint (used by `verify` and
 // after `claude on`). A 2xx means the key + router are healthy.
 async function verifyMessages(routerUrl, apiKey) {
-  const base = routerUrl || DEFAULT_ROUTER;
+  const base = routerUrl || defaultRouter();
   return post(
     `${base}/v1/messages`,
     {
@@ -81,11 +85,14 @@ async function verifyMessages(routerUrl, apiKey) {
 // GET /v1/models with the NeoSmith key. Returns { status, data } where data
 // is the parsed OpenAI-list body ({ object: "list", data: [...] }).
 async function listModels(routerUrl, apiKey) {
-  const base = routerUrl || DEFAULT_ROUTER;
+  const base = routerUrl || defaultRouter();
   const resp = await get(`${base}/v1/models`, { Authorization: `Bearer ${apiKey}` });
   let data = {};
   try { data = JSON.parse(resp.body); } catch { data = {}; }
   return { status: resp.status, data };
 }
 
-module.exports = { DEFAULT_ROUTER, get, post, whoami, verifyMessages, listModels };
+module.exports = {
+  get DEFAULT_ROUTER() { return defaultRouter(); },
+  get, post, whoami, verifyMessages, listModels,
+};

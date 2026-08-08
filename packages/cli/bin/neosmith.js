@@ -48,17 +48,35 @@ async function main() {
   // of the dispatcher sees clean positional args.
   // Accept --dry-run, --dry-run=true, --dry-run=false. NEOSMITH_DRY_RUN env
   // is also honored (set by the test suite and CI).
+  // --env <name> is the same kind of global flag: strip it here and hand it to
+  // lib/env.js via NEOSMITH_ENV. Nothing above resolved a router URL at require
+  // time (harness.ROUTER_URL and http.DEFAULT_ROUTER are lazy getters), so
+  // setting it now is early enough for every command module already loaded.
   const rawArgv = process.argv.slice(2);
   const cleaned = [];
   let dry = process.env.NEOSMITH_DRY_RUN === "1";
+  let envName = null;
   for (let i = 0; i < rawArgv.length; i++) {
     const a = rawArgv[i];
     if (a === "--dry-run") { dry = true; continue; }
     if (a === "--dry-run=true" || a === "--dry-run=1") { dry = true; continue; }
     if (a === "--dry-run=false" || a === "--dry-run=0") { dry = false; continue; }
+    if (a === "--env") { envName = rawArgv[++i] || ""; continue; }
+    if (a.startsWith("--env=")) { envName = a.slice("--env=".length); continue; }
     cleaned.push(a);
   }
   process.env.NEOSMITH_DRY_RUN = dry ? "1" : "";
+  if (envName !== null) process.env.NEOSMITH_ENV = envName;
+
+  // Resolve now so an unknown --env dies immediately with the known names,
+  // before any command has run, and so the NEOSMITH_BASE_URL override is
+  // announced once rather than silently changing where a key gets sent.
+  const activeEnv = harness.envInfo();
+  if (activeEnv.overridden) {
+    ui.warn(
+      `NEOSMITH_BASE_URL=${activeEnv.baseUrl} overrides --env ${activeEnv.requestedName}`,
+    );
+  }
 
   const args = cleaned;
   const first = (args.shift() || "").toLowerCase();
@@ -118,7 +136,7 @@ async function compatInit(args) {
   let keyArg = args[0];
   if (!keyArg) keyArg = undefined; // let login prompt
   await keyMod.login(keyArg);
-  const stored = io.readKeyRef();
+  const stored = io.readKeyRef(harness.keyEnv());
   ui.log("");
   return commands.on.run(["claude", "--key", stored].concat(args.filter((a, i) => i !== 0 && a.startsWith("--"))));
 }
