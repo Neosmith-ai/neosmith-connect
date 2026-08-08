@@ -43,7 +43,8 @@
     "smoke": "node scripts/smoke.js",
     "smoke:ci": "node scripts/smoke.js --quiet",
     "install-hook": "node scripts/install-hook.js",
-    "test:router-facing": "node scripts/run-contract.js --only router-contract,models,env"
+    "test:router-facing": "node scripts/run-contract.js --only router-contract,models,env",
+    "e2e:offline": "node scripts/e2e/offline.js"
   },
   "engines": {
     "node": ">=18"

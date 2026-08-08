@@ -58,6 +58,14 @@ jobs:
       - name: Verify manifest-driven docs match the manifest
         run: node scripts/generate-docs.js --check
 
+      # Drives the e2e driver over all 8 harnesses against the offline contract
+      # mock: no secrets, no network, no cost. Proves run.js works on every OS
+      # before the paid staging workflow depends on it — a bug in the driver
+      # should cost a free job, not a billed one.
+      - name: Offline e2e (all harnesses, contract mock)
+        working-directory: packages/cli
+        run: npm run e2e:offline
+
   # scripts/contract/packing.test.js already asserts the tarball CONTENTS in
   # every matrix cell (via `npm pack --dry-run`). This job covers the part a
   # dry run cannot: actually installing the tarball and running the binary
