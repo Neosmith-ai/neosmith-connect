@@ -191,6 +191,7 @@ Enable streaming + tool/function calling. `off` clears the on-flag and reminds y
 | `neosmith verify` | Hit `/whoami` with the stored key. |
 | `neosmith uninstall [--all]` | Disconnect all harnesses, remove `~/.neosmith` (+ launcher with `--all`). |
 | `neosmith help [harness]` | Top-level or per-harness help. |
+| `neosmith feedback [bug|idea] [--message "..."]` | Open the right GitHub issue template (`bug.md` or `enhancement.md`) in your default browser with a prefilled body (CLI/Node/OS version + router host) so you just review and submit. `--no-open` prints the URL + body for headless use. |
 | `neosmith init <key>` | *(Back-compat)* login + `claude on` in one shot — the original one-liner. |
 
 ## Developing: the smoke gate
