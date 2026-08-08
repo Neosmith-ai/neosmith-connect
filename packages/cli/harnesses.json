@@ -26,7 +26,7 @@
   "models": {
     "pro": "neosmith.intelligent-pro",
     "basic": "neosmith.intelligent-basic",
-    "lite": "neosmith.intelligent-lite",
+    "lite": "neosmith.neolite",
     "maestro": "neosmith.intelligent-maestro"
   },
   "claudeTierMap": {

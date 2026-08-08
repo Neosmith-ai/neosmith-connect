@@ -1,0 +1,124 @@
+{
+  "contractVersion": "1.0.0",
+  "$comment": "The wire contract between router-v4 and @neosmithai/cli. Owned here; vendored byte-identical into neosmith-connect at packages/cli/contract/. See contract/README.md for the versioning rules.",
+
+  "environments": {
+    "prod": {
+      "label": "production",
+      "baseUrl": "https://router.neosmith.ai",
+      "openaiBaseUrl": "https://router.neosmith.ai/v1",
+      "portalUrl": "https://router.neosmith.ai/me/login",
+      "hosts": ["router.neosmith.ai"]
+    },
+    "staging": {
+      "label": "staging",
+      "baseUrl": "https://staging.router.neosmith.ai",
+      "openaiBaseUrl": "https://staging.router.neosmith.ai/v1",
+      "portalUrl": "https://staging.router.neosmith.ai/me/login",
+      "hosts": ["staging.router.neosmith.ai"]
+    },
+    "local": {
+      "label": "local dev",
+      "baseUrl": "http://127.0.0.1:4008",
+      "openaiBaseUrl": "http://127.0.0.1:4008/v1",
+      "portalUrl": "http://127.0.0.1:4008/me/login",
+      "hosts": ["127.0.0.1:4008", "localhost:4008"]
+    }
+  },
+
+  "auth": {
+    "scheme": "bearer",
+    "headers": ["Authorization: Bearer <key>", "x-api-key: <key>"],
+    "keyPrefixes": ["sk-plus-", "sk-std-", "sk-slm-", "eyJ"],
+    "clientMustNotGateOnPrefix": true,
+    "$clientMustNotGateOnPrefix": "The router is the sole authority on key validity. The CLI passes any byte string through untouched; pinned by neosmith-connect scripts/contract/key-shape.test.js.",
+    "unauthenticatedStatus": 401,
+    "revokedStatus": 401
+  },
+
+  "endpoints": [
+    {
+      "method": "GET",
+      "path": "/whoami",
+      "auth": "required",
+      "unauthStatus": 401,
+      "responseRequiredKeys": [
+        "ok", "dev_slug", "org_id", "team_id", "project_id",
+        "tier", "cap", "router_url", "environment"
+      ],
+      "capRequiredKeys": [
+        "enabled", "effective_cap_tokens", "consumed_30d",
+        "remaining", "pct_used", "overflow_rate_multiplier"
+      ],
+      "$environment": "Names the deployment that answered, so the CLI can report the environment authoritatively instead of inferring it from the hostname it dialled."
+    },
+    {
+      "method": "GET",
+      "path": "/v1/models",
+      "auth": "required",
+      "unauthStatus": 401,
+      "responseRequiredKeys": ["object", "data"],
+      "objectConst": "list",
+      "itemRequiredKeys": ["id", "object", "created", "owned_by"],
+      "itemObjectConst": "model",
+      "ownedByConst": "neosmith"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/messages",
+      "auth": "required",
+      "unauthStatus": 401,
+      "requiredRequestHeaders": ["anthropic-version", "content-type"]
+    },
+    { "method": "POST", "path": "/v1/chat/completions", "auth": "required", "unauthStatus": 401 },
+    { "method": "POST", "path": "/v1/responses",        "auth": "required", "unauthStatus": 401 },
+    { "method": "GET",  "path": "/health",   "auth": "none", "status": [200] },
+    { "method": "GET",  "path": "/ready",    "auth": "none", "status": [200, 503] },
+    { "method": "GET",  "path": "/me/login", "auth": "none", "status": [200] }
+  ],
+
+  "optionalRequestHeaders": {
+    "x-neosmith-project":  "repo attribution; overrides the key's bound project",
+    "x-neosmith-repo":     "alias of x-neosmith-project",
+    "x-neosmith-session":  "conversation grouping",
+    "x-neosmith-agent":    "harness / client id",
+    "x-neosmith-customer": "shared-key per-developer attribution",
+    "x-neosmith-tier":     "tier hint; the value in the admin DB is authoritative"
+  },
+
+  "responseHeaders": [
+    "X-NeoSmith-Request-ID",
+    "X-NeoSmith-Model",
+    "X-NeoSmith-Model-Class",
+    "X-NeoSmith-Reason",
+    "X-NeoSmith-Escalated",
+    "X-NeoSmith-Latency-Ms"
+  ],
+  "$responseHeaders": "The subset the CLI may rely on. app._expose_headers is a superset; security hardening can narrow it to SAFE_EXPOSE_HEADERS, so only headers listed here are contractual.",
+
+  "skus": {
+    "catalogue": [
+      "neosmith.intelligent-maestro",
+      "neosmith.intelligent-pro",
+      "neosmith.intelligent-basic",
+      "neosmith.neolite"
+    ],
+    "membership": "subset",
+    "$membership": "GET /v1/models is filtered per org by _filter_skus_for_org_id, so a live response is a SUBSET of this catalogue, never necessarily equal. tests/test_router_http_surface.py can assert equality only because its fixture mints into a fresh org with no allowlist.",
+    "deprecated": [
+      "neosmith.intelligent-lite",
+      "neosmith.intelligent-elite",
+      "neosmith.elite",
+      "neosmith.maestro"
+    ],
+    "$deprecated": "Still ROUTED for backward compatibility but no longer LISTED by GET /v1/models. A client may keep sending these and they will resolve, but nothing new should adopt them and a user running `neosmith models` will not see them. Removing one from routing is a MAJOR contract bump.",
+    "cheapestForSmoke": "neosmith.neolite",
+    "$cheapestForSmoke": "Sealed single-model budget SKU. Never escalates to Opus or Sonnet, cheaper than Haiku — the SKU CI smoke prompts must use."
+  },
+
+  "wireByHarness": {
+    "anthropic-messages": "/v1/messages",
+    "openai-responses":   "/v1/responses",
+    "openai-completions": "/v1/chat/completions"
+  }
+}

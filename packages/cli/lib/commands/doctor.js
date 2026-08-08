@@ -15,6 +15,15 @@ const fs = require("fs");
 const path = require("path");
 
 const harness = require("../harness");
+
+// The cheapest SKU the router serves, per the contract. Probes are 1-token
+// but they are still real calls — never probe with a de-listed SKU or a tier
+// that can escalate to a frontier model.
+function probeModel() {
+  try {
+    return require("../../contract/router-contract.v1.json").skus.cheapestForSmoke;
+  } catch { return harness.MODELS.lite; }
+}
 const http = require("../http");
 const io = require("../io");
 const ui = require("../ui");
@@ -102,7 +111,7 @@ async function probeFor(h, apiKey) {
           "Authorization": `Bearer ${apiKey}`,
           "content-type": "application/json",
         },
-        { model: "neosmith.intelligent-lite", input: ".", max_output_tokens: 1 },
+        { model: probeModel(), input: ".", max_output_tokens: 1 },
       );
     } else {
       // openai-completions (or chat-completions alias)
@@ -112,7 +121,7 @@ async function probeFor(h, apiKey) {
           "Authorization": `Bearer ${apiKey}`,
           "content-type": "application/json",
         },
-        { model: "neosmith.intelligent-lite", messages: [{ role: "user", content: "." }], max_tokens: 1 },
+        { model: probeModel(), messages: [{ role: "user", content: "." }], max_tokens: 1 },
       );
     }
   } catch (e) {

@@ -172,7 +172,7 @@ test("codex refuses a cross-environment re-point but still allows a same-env mod
   // The documented model-switch path must keep working.
   const same = run(["codex", "on", "--model", "lite"], home);
   assert.equal(same.status, 0, same.all);
-  assert.match(fs.readFileSync(path.join(home, ".codex", "config.toml"), "utf8"), /neosmith\.intelligent-lite/);
+  assert.match(fs.readFileSync(path.join(home, ".codex", "config.toml"), "utf8"), /neosmith\.neolite/);
 });
 
 // --- key isolation ---------------------------------------------------------

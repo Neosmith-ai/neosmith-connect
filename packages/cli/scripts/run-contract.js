@@ -19,9 +19,33 @@ const path = require("path");
 // Explicit absolute file list — auto-discovers every *.test.js, excludes
 // helpers (_sandbox.js, _mock_server.js), and is fully portable (glob args to
 // run() are unreliable on Windows and unsupported pre-22).
-const files = fs.readdirSync(path.join(__dirname, "contract"))
-  .filter((f) => f.endsWith(".test.js"))
+// `--only a,b` restricts the run to the named suites (the filename without
+// its .test.js suffix). Used by `npm run test:router-facing`, which the
+// router's pre-deploy gate runs, and handy for local iteration.
+const onlyArg = (() => {
+  const i = process.argv.indexOf("--only");
+  if (i !== -1) return process.argv[i + 1];
+  const inline = process.argv.find((a) => a.startsWith("--only="));
+  return inline ? inline.slice("--only=".length) : null;
+})();
+const only = onlyArg ? onlyArg.split(",").map((s) => s.trim()).filter(Boolean) : null;
+
+const allFiles = fs.readdirSync(path.join(__dirname, "contract"))
+  .filter((f) => f.endsWith(".test.js"));
+
+const files = allFiles
+  .filter((f) => !only || only.includes(f.replace(/\.test\.js$/, "")))
   .map((f) => path.join(__dirname, "contract", f));
+
+if (only) {
+  const known = allFiles.map((f) => f.replace(/\.test\.js$/, ""));
+  const unknown = only.filter((n) => !known.includes(n));
+  if (unknown.length) {
+    console.error(`unknown suite(s): ${unknown.join(", ")}\nknown: ${known.join(", ")}`);
+    process.exit(2);
+  }
+  console.log(`running ${files.length} of ${allFiles.length} suites: ${only.join(", ")}\n`);
+}
 
 // A Writable, not a Transform: nothing reads a Transform's readable side here,
 // so its buffer fills, writes stall, "finish" never fires and the process
