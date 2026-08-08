@@ -92,32 +92,39 @@ function claudeCodeEditorKeys() {
   ];
 }
 
+const EDITORS = ["vscode", "cursor"];
+
+// Per-OS location of a VS Code-family editor's user settings.json.
+//
+// Single source of truth: detectEditorsWithClaudeExt, unwireAllEditors and the
+// smoke rehearsal all resolve through here. They used to carry three separate
+// copies of this switch, and the smoke copy was Windows-only — so on Linux and
+// macOS the rehearsal seeded a file the CLI never touched, and its "restored
+// byte-for-byte" check passed because nothing had been written.
+function editorSettingsPath(editor) {
+  const dirName = editor === "vscode" ? "Code" : "Cursor";
+  if (process.platform === "darwin") {
+    return path.join(io.HOME, "Library", "Application Support", dirName, "User", "settings.json");
+  }
+  if (process.platform === "win32") {
+    const roaming = process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming");
+    return path.join(roaming, dirName, "User", "settings.json");
+  }
+  return path.join(io.HOME, ".config", dirName, "User", "settings.json");
+}
+
 // Discover installed VS Code-family editors that have the Claude Code
 // extension. Returns [{ editor, settingsPath }]. Detection is by the extension
 // dir under ~/.<editor>/extensions/anthropic.claude-code-*.
 function detectEditorsWithClaudeExt() {
-  const home = io.HOME;
-  const roaming = process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming");
-  const candidates = [
-    { editor: "vscode", dir: "Code", settingsDir: path.join(roaming, "Code", "User") },
-    { editor: "cursor", dir: "Cursor", settingsDir: path.join(roaming, "Cursor", "User") },
-  ];
-  if (process.platform === "darwin") {
-    candidates[0].settingsDir = path.join(home, "Library", "Application Support", "Code", "User");
-    candidates[1].settingsDir = path.join(home, "Library", "Application Support", "Cursor", "User");
-  } else if (process.platform !== "win32") {
-    candidates[0].settingsDir = path.join(home, ".config", "Code", "User");
-    candidates[1].settingsDir = path.join(home, ".config", "Cursor", "User");
-  }
-
   const found = [];
-  for (const c of candidates) {
-    const extRoot = path.join(home, `.${c.editor === "vscode" ? "vscode" : c.editor}`, "extensions");
+  for (const editor of EDITORS) {
+    const extRoot = path.join(io.HOME, `.${editor}`, "extensions");
     let present = false;
     try {
       present = fs.readdirSync(extRoot).some((n) => n.toLowerCase().startsWith(CLAUDE_EXT_PREFIX));
     } catch { /* no extensions dir → editor not installed */ }
-    if (present) found.push({ editor: c.editor, settingsPath: path.join(c.settingsDir, "settings.json") });
+    if (present) found.push({ editor, settingsPath: editorSettingsPath(editor) });
   }
   return found;
 }
@@ -331,13 +338,8 @@ function off(ctx) {
 // installed — a stale snapshot is still restored).
 function unwireAllEditors() {
   const done = [];
-  for (const editor of ["vscode", "cursor"]) {
-    const roaming = process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming");
-    let settingsDir;
-    if (process.platform === "darwin") settingsDir = path.join(io.HOME, "Library", "Application Support", editor === "vscode" ? "Code" : "Cursor", "User");
-    else if (process.platform === "win32") settingsDir = path.join(roaming, editor === "vscode" ? "Code" : "Cursor", "User");
-    else settingsDir = path.join(io.HOME, ".config", editor === "vscode" ? "Code" : "Cursor", "User");
-    const settingsPath = path.join(settingsDir, "settings.json");
+  for (const editor of EDITORS) {
+    const settingsPath = editorSettingsPath(editor);
     // Only act if we actually wired this editor (a snapshot or a restore
     // ledger exists) — otherwise leave a hand-configured editor untouched.
     const id = `claude-ext-${editor}`;
@@ -406,4 +408,7 @@ module.exports = {
   writable: true,
   configFile: CONFIG,
   on, off, status, help,
+  // Exposed so the smoke rehearsal targets the same per-OS paths the harness
+  // writes to, instead of keeping its own (Windows-only) copy of the logic.
+  EDITORS, editorSettingsPath,
 };

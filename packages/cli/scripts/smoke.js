@@ -94,14 +94,16 @@ function runRehearsal(dir) {
   const home = mkdir(path.join(dir, "home"));
   mkdir(path.join(home, ".vscode", "extensions", "anthropic.claude-code-2.1.224-win32-x64"));
   mkdir(path.join(home, ".cursor", "extensions", "anthropic.claude-code-2.1.221-win32-x64"));
-  mkdir(path.join(home, "Code", "User"));
-  mkdir(path.join(home, "Cursor", "User"));
 
   // Pre-existing editor settings to prove merge-not-clobber + byte-for-byte
   // restore. VS Code's block carries a USER-DEFINED env var (issue #15): it
   // must survive `on` and be back after `off`.
-  const codeSettings = path.join(home, "Code", "User", "settings.json");
-  const cursorSettings = path.join(home, "Cursor", "User", "settings.json");
+  //
+  // The editor settings paths are per-OS and are resolved INSIDE the child,
+  // via claude.js's own editorSettingsPath(), because only the child has the
+  // sandbox HOME. Seeding them here from a hardcoded Windows layout meant that
+  // on Linux/macOS the CLI wrote somewhere else entirely — and the "restored
+  // byte-for-byte" checks passed against a file nothing had touched.
   const codeBefore = JSON.stringify({
     "editor.fontSize": 15,
     "workbench.colorTheme": "Default Dark+",
@@ -110,8 +112,6 @@ function runRehearsal(dir) {
     ],
   }, null, 2) + "\n";
   const cursorBefore = JSON.stringify({ "editor.minimap.enabled": false }, null, 2) + "\n";
-  fs.writeFileSync(codeSettings, codeBefore);
-  fs.writeFileSync(cursorSettings, cursorBefore);
   write(path.join(dir, "editor-before.code.settings.json"), codeBefore);
   write(path.join(dir, "editor-before.cursor.settings.json"), cursorBefore);
 
@@ -129,9 +129,19 @@ function runRehearsal(dir) {
     'const fs = require("fs"), path = require("path");',
     'const read = (p) => (fs.existsSync(p) ? fs.readFileSync(p, "utf8") : "(absent)");',
     'const save = (name, p) => fs.writeFileSync(path.join(outdir, name), read(p));',
-    'const codeS = path.join(home, "Code", "User", "settings.json");',
-    'const cursorS = path.join(home, "Cursor", "User", "settings.json");',
+    // Same resolver the harness uses — no second copy of the per-OS switch.
+    'const codeS = claude.editorSettingsPath("vscode");',
+    'const cursorS = claude.editorSettingsPath("cursor");',
     'const cliS = path.join(home, ".claude", "settings.json");',
+    // Seed the pre-connect editor settings at those real paths.
+    `const codeBefore = ${JSON.stringify(codeBefore)};`,
+    `const cursorBefore = ${JSON.stringify(cursorBefore)};`,
+    'fs.mkdirSync(path.dirname(codeS), { recursive: true });',
+    'fs.mkdirSync(path.dirname(cursorS), { recursive: true });',
+    'fs.writeFileSync(codeS, codeBefore);',
+    'fs.writeFileSync(cursorS, cursorBefore);',
+    // Report the resolved paths so the parent checks the same files.
+    'console.log("SMOKE_PATHS=" + JSON.stringify({ codeS, cursorS, cliS }));',
     'console.log("### ON ###");',
     'claude.on({ key: "sk-plus-smoke-XXXXXXXXXXXX", model: h.resolveModel("pro") });',
     'save("cli.settings.wired.json", cliS);',
@@ -164,9 +174,23 @@ function runRehearsal(dir) {
   const log_ = (res.stdout || "") + "\n" + (res.stderr || "");
   write(path.join(dir, "rehearsal.log"), log_);
 
+  // The child reports where it actually wrote. If that line is missing the run
+  // died early — fail loudly rather than silently checking files that were
+  // never touched.
+  const pathsLine = (log_.match(/^SMOKE_PATHS=(.*)$/m) || [])[1];
+  let paths = null;
+  try { paths = pathsLine ? JSON.parse(pathsLine) : null; } catch { /* left null */ }
+  if (!paths) {
+    return {
+      ok: false,
+      checks: [["rehearsal child reported the paths it wrote to", false]],
+      log: log_,
+    };
+  }
+  const { codeS: codeSettings, cursorS: cursorSettings, cliS: cliSettings } = paths;
+
   // Save the post-off state for the byte-restore invariant. (The wired state
   // was already saved by the child during `on`.)
-  const cliSettings = path.join(home, ".claude", "settings.json");
   const read = (p) => (fs.existsSync(p) ? fs.readFileSync(p, "utf8") : "(absent after off)");
   write(path.join(dir, "cli.settings.after-off.json"), read(cliSettings));
   write(path.join(dir, "editor-after.code.settings.json"), read(codeSettings));
@@ -177,6 +201,10 @@ function runRehearsal(dir) {
   const cursorRestored = fs.existsSync(cursorSettings) && fs.readFileSync(cursorSettings, "utf8") === cursorBefore;
   const cliRemoved = !fs.existsSync(cliSettings);
   const statusOn = /"on":true/.test(log_);
+  // The wired artifact must differ from the seed — otherwise `on` never touched
+  // the file and every "restored byte-for-byte" check below is vacuous.
+  const editorActuallyWired =
+    read(path.join(dir, "editor-wired.code.settings.json")) !== codeBefore;
 
   // Issue #15 invariants.
   const wiredCode = read(path.join(dir, "editor-wired.code.settings.json"));
@@ -191,6 +219,7 @@ function runRehearsal(dir) {
 
   const checks = [
     ["claude on → status reports on:true", statusOn],
+    ["on → the editor settings.json was actually written (not a vacuous pass)", editorActuallyWired],
     ["on → user's own editor env var merged, not clobbered (issue #15)", userVarMerged],
     ["off → VS Code settings restored byte-for-byte", codeRestored],
     ["off → Cursor settings restored byte-for-byte", cursorRestored],
