@@ -39,13 +39,20 @@ async function run(args) {
   if (res && res.alreadyOn) {
     ui.warn(`${mod.name} is already connected to NeoSmith. To re-apply, run \`neosmith ${h} off\` first.`);
   }
+  // needsEnv harnesses print their own platform-correct env instructions in
+  // on() (see lib/envsetup.js), so this only adds the stakes, not a second set
+  // of steps — a generic "add it to your shell profile" line here contradicted
+  // those instructions on Windows.
+  if (res && res.needsEnv) {
+    ui.log("");
+    ui.log(ui.c("dim", `Until that variable is set, ${mod.name} has no credentials — the`));
+    ui.log(ui.c("dim", `config file only points at its name.`));
+  }
   if (res && res.wrote) {
-    if (mod.writable) {
+    if (mod.writable && !(res && res.needsEnv)) {
+      // needsEnv harnesses already printed restart steps with the env change.
       ui.log(ui.c("dim", `Restart ${mod.name} for the change to take effect.`));
     }
-  }
-  if (res && res.needsEnv) {
-    ui.log(ui.c("dim", `(Set the OPENAI_API_KEY env var in your shell profile; the TOML only holds an env_key reference.)`));
   }
 }
 
