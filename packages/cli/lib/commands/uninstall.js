@@ -7,6 +7,7 @@ const fs = require("fs");
 const path = require("path");
 const harness = require("../harness");
 const io = require("../io");
+const originals = require("../originals");
 const ui = require("../ui");
 
 async function run(args) {
@@ -14,6 +15,22 @@ async function run(args) {
   const skipConfirm = args.includes("--yes") || args.includes("-y");
 
   ui.banner("NeoSmith · uninstall");
+
+  // uninstall deletes ~/.neosmith outright. Every harness is disconnected
+  // first, so live configs are restored — but anything still stored after that
+  // (an orphaned snapshot from a harness that reports off) goes with the tree.
+  // Say so before asking, and point at the export.
+  const stored = originals.list();
+  if (stored.length) {
+    ui.log(`  ${stored.length} original settings file(s) are stored in ${originals.tilde(io.SNAPSHOTS_DIR)}/:`);
+    for (const o of stored) {
+      ui.log(ui.c("dim", `    ${o.label} → ${originals.tilde(o.source) || "(unknown source)"}`));
+    }
+    ui.log(ui.c("dim", "  Each is restored to its location first; then ~/.neosmith is removed entirely,"));
+    ui.log(ui.c("dim", "  so nothing is left to restore from afterwards."));
+    ui.log(ui.c("dim", "  Run `neosmith originals --export <dir>` first to keep a copy."));
+    ui.log("");
+  }
 
   if (!skipConfirm && ui.isTTY) {
     if (!(await ui.confirm("Disconnect every harness and remove ~/.neosmith + the launcher?"))) {

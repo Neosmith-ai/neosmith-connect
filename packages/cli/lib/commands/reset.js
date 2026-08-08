@@ -14,6 +14,7 @@ const path = require("path");
 
 const harness = require("../harness");
 const io = require("../io");
+const originals = require("../originals");
 const ui = require("../ui");
 
 function parseFlags(args) {
@@ -53,6 +54,20 @@ function removeInstallClone() {
 async function run(args) {
   const flags = parseFlags(args);
   ui.banner("NeoSmith · reset");
+
+  // Say plainly what happens to the stored copies of the user's own settings
+  // before asking. `off` puts each one back and consumes the copy in the
+  // process, so after this there is nothing left to restore from.
+  const stored = originals.list();
+  if (stored.length) {
+    ui.log(`  ${stored.length} original settings file(s) are stored in ${originals.tilde(io.SNAPSHOTS_DIR)}/:`);
+    for (const o of stored) {
+      ui.log(ui.c("dim", `    ${o.label} → ${originals.tilde(o.source) || "(unknown source)"}`));
+    }
+    ui.log(ui.c("dim", "  They will be restored to those locations, and the stored copies consumed."));
+    ui.log(ui.c("dim", "  Run `neosmith originals --export <dir>` first to keep a copy."));
+    ui.log("");
+  }
 
   if (!flags.yes && ui.isTTY) {
     const what = flags.all ? "Disconnect every harness, clear key + install + launcher?" : "Disconnect every harness and clear the stored key?";
