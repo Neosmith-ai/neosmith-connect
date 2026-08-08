@@ -6,6 +6,7 @@
 const harness = require("../harness");
 const key = require("../key");
 const io = require("../io");
+const originals = require("../originals");
 const ui = require("../ui");
 
 async function run(args) {
@@ -33,12 +34,26 @@ async function run(args) {
   for (const mod of harness.list()) {
     printOne(mod);
   }
+
+  if (originals.list().length) {
+    ui.log("");
+    ui.log(ui.c("dim", `  Your pre-connect settings are stored in ${originals.tilde(io.SNAPSHOTS_DIR)}/`));
+    ui.log(ui.c("dim", "  and restored by `off`. Run `neosmith originals` to read or export them."));
+  }
 }
 
 function printOne(mod) {
   const res = mod.status({});
   const tag = res.on ? ui.c("green", "on ") : ui.c("dim", "off");
   ui.log(`  ${tag}  ${ui.c("bold", mod.name.padEnd(16))} ${res.detail}`);
+  // Which of the user's own files we are holding a copy of, and where. Without
+  // this, the only trace that a backup exists is the audit log.
+  for (const o of originals.forHarness(mod.id)) {
+    const what = o.tombstone
+      ? `no file before connect · \`off\` deletes ${originals.tilde(o.source) || "it"}`
+      : `original ${originals.tilde(o.source) || "(unknown source)"} → ${originals.tilde(o.bak)}`;
+    ui.log(ui.c("dim", `        ${what}`));
+  }
 }
 
 module.exports = { run };

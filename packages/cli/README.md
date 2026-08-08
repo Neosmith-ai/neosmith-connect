@@ -114,7 +114,8 @@ If a harness shows `pass`, you're done. Open the tool, send any prompt, and you 
 | `neosmith <harness> on [--model X] [--autocomplete]` | Connect a harness. Snapshots pre-state for `off`. |
 | `neosmith <harness> off` | Restore a harness's pre-connect config (byte-for-byte for file-writable harnesses). |
 | `neosmith <harness> status` | Show one harness's on/off state + model. |
-| `neosmith status` | Show all harnesses + stored key. |
+| `neosmith status` | Show all harnesses + stored key, and which of your settings files are backed up. |
+| `neosmith originals [--show <harness>] [--export <dir>] [--json]` | Show where your pre-connect settings are stored, read one, or copy them all out. |
 | `neosmith verify` | Hit `/whoami` with the stored key. |
 | `neosmith doctor` | Per-harness live protocol check + audit-log integrity. |
 | `neosmith models` | List available NeoSmith model SKUs (from `GET /v1/models`, offline fallback to the manifest). |
@@ -153,6 +154,34 @@ For every file-writable harness:
 - **`off` restores, it doesn't just delete.** Alongside the snapshot, `on` records each key's prior value in `~/.neosmith/state.json`. If the snapshot is gone (you cleaned `~/.neosmith`, or moved machines), `off` replays that ledger: your values come back and only the keys NeoSmith introduced are removed.
 
 `npm run smoke` rehearses all of this against a throwaway `HOME` and saves before/wired/after copies you can diff yourself.
+
+### Where your original settings are kept
+
+Before `on` writes anything, it copies the whole pre-connect file to `~/.neosmith/snapshots/<harness>.bak`. `neosmith originals` shows you what's there:
+
+```
+$ neosmith originals
+
+  NeoSmith · your original settings
+
+  Stored in ~/.neosmith/snapshots/ · restored by `neosmith <harness> off`.
+
+  Claude Code  · 98 B · 8 Aug, 20:44
+    from   ~/.claude/settings.json
+    kept   ~/.neosmith/snapshots/claude.bak
+
+  Codex  · 21 B · 8 Aug, 20:44
+    from   ~/.codex/config.toml
+    kept   ~/.neosmith/snapshots/codex.bak
+```
+
+- `neosmith originals --show codex` prints the stored file as it was before you connected.
+- `neosmith originals --export ./backup` copies them all out with a `MANIFEST.json` recording where each one belongs.
+- `neosmith originals --json` for scripting.
+
+Claude Code lists two entries when the IDE extension is wired — the CLI config and the editor's own `settings.json` are snapshotted independently.
+
+**These copies don't last forever.** `off` puts the file back and consumes the copy; `neosmith uninstall` deletes `~/.neosmith` outright. Both name what they're about to remove before asking you to confirm. If you want a copy that survives, export it first.
 
 ### UI-driven harnesses (Copilot, Cline, JetBrains, Cursor)
 
