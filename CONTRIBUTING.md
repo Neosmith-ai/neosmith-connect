@@ -63,7 +63,7 @@ npm pack --pack-destination "$TEMP"        # Git Bash / PowerShell on Windows
 npm pack --pack-destination /tmp           # macOS / Linux
 
 # 2. Install it globally, exactly as a customer would receive it
-npm install -g "$TEMP/neosmithai-cli-0.7.0.tgz"
+npm install -g "$TEMP/neosmithai-cli-0.8.0.tgz"
 
 # 3. Confirm you're running the installed copy, not your working tree
 which neosmith        # should be your npm global bin, NOT ~/.local/bin
@@ -101,7 +101,7 @@ Read the file list. If a module you added isn't there, it's missing from
 To avoid touching your everyday global npm:
 
 ```bash
-npm install -g --prefix /tmp/npm-sandbox "$TEMP/neosmithai-cli-0.7.0.tgz"
+npm install -g --prefix /tmp/npm-sandbox "$TEMP/neosmithai-cli-0.8.0.tgz"
 /tmp/npm-sandbox/bin/neosmith --version      # macOS / Linux
 /tmp/npm-sandbox/neosmith.cmd --version      # Windows
 ```
@@ -258,8 +258,8 @@ prints the platform-correct steps; the logic lives in
 
 ```bash
 cd packages/cli
-npm test                 # the curated contract list
-npm run test:all         # every scripts/contract/*.test.js
+npm test                 # every scripts/contract/*.test.js, auto-discovered
+npm run test:all         # same thing — kept as an alias for muscle memory
 npm run smoke            # tests + isolated on/off rehearsal, opens the report
 npm run smoke:ci         # exit-code only, for hooks and CI
 ```
