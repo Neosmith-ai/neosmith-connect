@@ -42,6 +42,11 @@ npm run smoke                       # smoke gate: tests + isolated on/off rehear
 npm run scaffold                    # re-stamp from the source repos (deletes everything first)
 ```
 
+See **[CONTRIBUTING.md](CONTRIBUTING.md)** for the full development guide —
+building the CLI package locally with `npm pack`, installing and testing it
+exactly as a customer receives it (no registry upload), testing against a
+throwaway HOME, the test suite, and the release process.
+
 ## Filing feedback or an issue
 
 The fastest way to tell us something isn't working (or open an enhancement request) is
