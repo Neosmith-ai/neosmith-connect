@@ -57,3 +57,45 @@ jobs:
 
       - name: Verify manifest-driven docs match the manifest
         run: node scripts/generate-docs.js --check
+
+  # scripts/contract/packing.test.js already asserts the tarball CONTENTS in
+  # every matrix cell (via `npm pack --dry-run`). This job covers the part a
+  # dry run cannot: actually installing the tarball and running the binary
+  # that npm resolves, from a directory with no checkout in sight — so a
+  # relative require that only works inside the repo fails here rather than
+  # for the first user who installs from npm.
+  tarball:
+    name: install the tarball and run the installed binary
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: "20"}
+      - name: Pack
+        working-directory: packages/cli
+        run: |
+          npm install --omit=dev --no-fund --no-audit
+          npm pack --pack-destination /tmp
+      - name: Install globally and drive it
+        run: |
+          set -e
+          TARBALL=$(ls /tmp/neosmithai-cli-*.tgz)
+          npm install -g "$TARBALL"
+          cd /tmp
+          BIN=$(command -v neosmith)
+          echo "resolved: $BIN"
+          case "$BIN" in
+            *"$GITHUB_WORKSPACE"*)
+              echo "::error::neosmith resolved to the checkout, not the installed package"
+              exit 1 ;;
+          esac
+          neosmith --version
+          neosmith help
+          neosmith status
+          neosmith --env staging help | grep -q "staging.router.neosmith.ai"
+      - name: Upload the tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-tarball
+          path: /tmp/neosmithai-cli-*.tgz
+          retention-days: 3

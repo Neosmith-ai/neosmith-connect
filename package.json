@@ -10,10 +10,11 @@
     "scaffold": "node tools/scaffold-monorepo.js",
     "generate-docs": "node scripts/generate-docs.js",
     "sync-docs": "node scripts/sync-docs-mirror.js",
-    "test": "node --test packages/cli/scripts/contract/**/*.test.js",
+    "test": "npm test --workspace packages/cli",
     "smoke": "npm --workspace packages/cli run smoke",
     "smoke:ci": "npm --workspace packages/cli run smoke:ci",
-    "install-hook": "npm --workspace packages/cli run install-hook"
+    "install-hook": "npm --workspace packages/cli run install-hook",
+    "test:all": "npm run test:all --workspace packages/cli"
   },
   "engines": {
     "node": ">=18"
