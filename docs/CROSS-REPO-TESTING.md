@@ -50,6 +50,20 @@ cd /path/to/router_v4
 make serve-local          # mirrors, then serves :4008 with ENVIRONMENT=local
 ```
 
+**Windows (PowerShell — the native path):**
+
+```powershell
+cd C:\neosmith-ai\projects\router_v4-cli-contract
+.\scripts\serve-local.ps1
+```
+
+It mirrors with `robocopy /MIR` (the native equivalent of `rsync -a --delete`),
+sets `ENVIRONMENT=local`, and serves on :4008. `-Port` and `-AdminDb` are
+overridable; `-SkipMirror` re-serves without re-copying.
+
+> ClickHouse `WinError 10061` warnings on startup are expected — there is no
+> ClickHouse running locally, so spans simply are not exported.
+
 **Windows (Git Bash — no `make`/`rsync`):**
 
 ```bash
@@ -83,15 +97,27 @@ its own.
 cd /path/to/router_v4 && make local-key        # prints the raw token once
 ```
 
-Windows / no `make`:
+**Windows (PowerShell):**
+
+```powershell
+$env:LOCAL_KEY = .\scripts\local-key.ps1
+```
+
+Safe to run repeatedly — each run mints a new key with a millisecond-stamped
+label. Labels must be unique within a dev's *active* key set, so a fixed label
+makes the second run fail.
+
+**Git Bash:**
 
 ```bash
 cd /tmp/pkg
 NEOSMITH_ADMIN_DB=/tmp/neosmith-local-admin.db PYTHONPATH=/tmp/pkg/router_v4 \
 python -c "
+import time
 from router_v4.admin import store
 store.upsert_org('local','Local Dev','dev@localhost')
-raw,_ = store.mint_key('local','dev','slm','dev@localhost',label='local-cli')
+raw,_ = store.mint_key('local','dev','slm','dev@localhost',
+                       label='local-cli-%d' % (time.time()*1000))
 print(raw)
 "
 ```
@@ -103,6 +129,22 @@ Keep it in a shell variable: `export LOCAL_KEY=sk-slm-...`
 Always use a throwaway `HOME` while testing, so your real config is never
 touched. On Windows set all of `HOME`, `USERPROFILE` and `APPDATA` — setting
 only `HOME` leaves several paths pointing at your real profile.
+
+**PowerShell:**
+
+```powershell
+$h = Join-Path $env:TEMP ("nsdev-" + [guid]::NewGuid().ToString('N').Substring(0,8))
+New-Item -ItemType Directory -Force $h | Out-Null
+$env:HOME = $h; $env:USERPROFILE = $h; $env:APPDATA = $h
+
+cd C:\neosmith-ai\projects\neosmith-connect\packages\cli
+node bin/neosmith.js --env local login $env:LOCAL_KEY
+node bin/neosmith.js --env local verify       # hits /whoami
+node bin/neosmith.js --env local models       # hits /v1/models
+node bin/neosmith.js --env local status       # banner shows env=local
+```
+
+**Git Bash / macOS / Linux:**
 
 ```bash
 export HOME=$(mktemp -d); export USERPROFILE="$HOME"; export APPDATA="$HOME"
@@ -287,3 +329,6 @@ are in review; it must read `main` before merge.
 | `mock router could not bind 127.0.0.1:4008` | A real local router is already on that port. |
 | `neosmith models` disagrees with `--model` | Contract drift. `npm run test:router-facing` names the mismatch. |
 | Harness reads the wrong config in an e2e run | `CODEX_HOME` / `CLAUDE_CONFIG_DIR` outrank `HOME`. `scripts/e2e/run.js` sets both; a hand-rolled test must too. |
+| `make: The term 'make' is not recognized` | Windows has no `make`. Use `.\scripts\serve-local.ps1`, and check you are in the **`router_v4-cli-contract`** worktree — the original `router_v4` checkout does not have these targets. |
+| `already has an active key labeled ...` | You pinned a fixed `-Label`. Omit it; the default is millisecond-stamped and re-runnable. |
+| ClickHouse `WinError 10061` when the router starts | Expected locally — no ClickHouse is running, so spans are not exported. Harmless. |
