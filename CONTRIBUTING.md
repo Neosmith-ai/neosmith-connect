@@ -312,6 +312,9 @@ repo supports 18), and directory recursion also matches helper files like
 
 ## Testing against staging
 
+> Step-by-step runbook for both loops, including how to boot a local
+> router and mint keys: [docs/CROSS-REPO-TESTING.md](docs/CROSS-REPO-TESTING.md)
+
 `neosmith` talks to production by default. `--env staging` points it at
 `staging.router.neosmith.ai`, and `--env local` at a router you are running
 yourself on `:4008`:
