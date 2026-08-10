@@ -35,15 +35,48 @@ jobs:
         # originals and envsetup were all missing from it, so the publish gate
         # was weaker than the PR gate that let those changes in.
         run: node scripts/run-contract.js
-      - name: Smoke test — CLI loads + help renders
+      # The previous check ran `node bin/neosmith.js help` from the SOURCE
+      # TREE, where every file is present whether or not it is packed — so it
+      # could not catch a file missing from the `files` allowlist, which
+      # CONTRIBUTING.md calls the most common "worked locally, broken on npm"
+      # bug. Build the tarball, install it globally, and drive THAT binary.
+      - name: Smoke test — install the tarball and run the installed binary
         working-directory: packages/cli
-        run: node bin/neosmith.js help
+        run: |
+          set -e
+          npm pack --pack-destination /tmp
+          TARBALL=$(ls /tmp/neosmithai-cli-*.tgz)
+          echo "packed: $TARBALL"
+          npm install -g "$TARBALL"
+
+          # Run from a directory with no checkout in sight, so a stray relative
+          # require cannot accidentally resolve against the source tree.
+          cd /tmp
+          command -v neosmith
+          neosmith --version
+          neosmith help
+          neosmith models --help 2>/dev/null || true
+          # The manifest and the contract must both be readable from the
+          # installed location — each is loaded from disk, not bundled.
+          neosmith status
+
       - name: Publish
         working-directory: packages/cli
-        # Provenance (--provenance) requires GitHub's OIDC token provider,
-        # which has been intermittently unavailable during the Aug 6 2026
-        # Actions outage. Re-enable once GitHub stabilizes:
-        #   npm publish --access public --provenance
-        run: npm publish --access public
+        # Route prereleases to a dist-tag instead of `latest`. Without this a
+        # `v0.9.0-rc.1` tag publishes straight to `latest` and every `npm
+        # install @neosmithai/cli` picks up a release candidate.
+        run: |
+          TAG_VER="${GITHUB_REF_NAME#v}"
+          case "$TAG_VER" in
+            *-rc*|*-beta*|*-alpha*|*-next*)
+              DIST_TAG=next ;;
+            *)
+              DIST_TAG=latest ;;
+          esac
+          echo "publishing $TAG_VER to dist-tag '$DIST_TAG'"
+          # Provenance (--provenance) requires GitHub's OIDC token provider,
+          # which has been intermittently unavailable during the Aug 6 2026
+          # Actions outage. Re-enable once GitHub stabilizes.
+          npm publish --access public --tag "$DIST_TAG"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

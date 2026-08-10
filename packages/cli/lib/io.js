@@ -20,6 +20,14 @@
 // deleted. Lives under ~/.neosmith/state.json (mode 0600) — prior values can
 // contain the user's own API keys, so it never reaches the audit log.
 //
+// Post-write fingerprint (issue #22): a snapshot restore is byte-for-byte, so
+// it also throws away anything the user wrote into the file AFTER `on` — and
+// editing your settings while a harness is connected is a completely normal
+// thing to do. So `on` stamps the sha256 of the file as it left it, and `off`
+// compares: identical → restore the snapshot (formatting, comments and key
+// order all come back); different → keep the user's live file and replay the
+// ledger over it, taking back only the keys NeoSmith owns.
+//
 // Audit log (T4): every state-changing io operation appends a JSON-Lines
 // record to ~/.neosmith/audit.log AFTER the operation succeeds. The log is
 // always redacted of key material (sk-plus- / sk-std- / sk-slm- / eyJ).
@@ -34,6 +42,7 @@
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
+const crypto = require("crypto");
 
 // Resolve HOME honoring the HOME env var first (so sandboxed test HOMEs work),
 // then USERPROFILE (Windows), then os.homedir() as a final fallback.
@@ -67,6 +76,14 @@ function redactAuditString(value) {
   return value;
 }
 
+// The active environment's name, for the audit record. Requires lib/env.js,
+// which requires only lib/manifest.js — io.js never requires lib/harness.js,
+// so there is no cycle. Never throws: an unresolvable environment must not
+// break a write that already succeeded.
+function currentEnvName() {
+  try { return require("./env").current().name; } catch { return null; }
+}
+
 function appendAuditLog(event) {
   // Audit AFTER the operation succeeds — a failed write must not produce a
   // phantom audit entry. Append-only JSON Lines, one record per event.
@@ -78,6 +95,10 @@ function appendAuditLog(event) {
     path:    redactAuditString(event.path || null),
     bytes:   event.bytes || null,
     key:     event.key === true ? "present" : (event.key === false ? "absent" : "absent"),
+    // Which router this invocation was pointed at. A prod/staging mixup is
+    // exactly the incident you reconstruct from this log, and the field is a
+    // name plus a public hostname — it carries no secret.
+    env:     event.env || currentEnvName(),
   };
   fs.appendFileSync(AUDIT_FILE, JSON.stringify(entry) + "\n", { mode: 0o600 });
 }
@@ -162,18 +183,68 @@ function clearSnapshot(harnessId) {
   if (fileExists(bak)) fs.unlinkSync(bak);
 }
 
-// ── ~/.neosmith/config.json — stored key ────────────────────────────────
-function readKeyRef() {
+// ── ~/.neosmith/config.json — stored key, per environment ───────────────────
+//
+// Shape (backward compatible):
+//   { "api_key": "<default-env key>", "keys": { "prod": "…", "staging": "…" } }
+//
+// The invariant that matters: a staging key must NEVER land in the slot a prod
+// invocation reads. So `keys[<env>]` is authoritative, the legacy top-level
+// `api_key` is only ever read for the default environment, and only a
+// default-environment write mirrors into it — which is what keeps install.sh
+// and older CLI versions (which know only `api_key`) reading the prod key.
+
+function defaultEnvName() {
+  // Read the manifest directly. io.js must not require lib/harness.js — every
+  // harness module requires it, so that would be a cycle.
+  try {
+    const m = require("./manifest").read().manifest;
+    return m.defaultEnvironment || "prod";
+  } catch { return "prod"; }
+}
+
+function readKeyRef(envName) {
   const cfg = readJSON(CONFIG_FILE);
-  return cfg && cfg.api_key ? cfg.api_key : null;
+  if (!cfg) return null;
+  const env = envName || defaultEnvName();
+  if (cfg.keys && cfg.keys[env]) return cfg.keys[env];
+  // Legacy fallback: a bare {api_key} file predates named environments, so it
+  // can only ever have meant the default environment.
+  if (env === defaultEnvName() && cfg.api_key) return cfg.api_key;
+  return null;
 }
 
-function writeKeyRef(apiKey) {
-  writeJSON(CONFIG_FILE, { api_key: apiKey }, 0o600);
+function writeKeyRef(apiKey, envName) {
+  const env = envName || defaultEnvName();
+  const cfg = readJSON(CONFIG_FILE) || {};
+  const keys = { ...(cfg.keys || {}) };
+  // Migration: an existing bare api_key was the default environment's key.
+  if (cfg.api_key && !keys[defaultEnvName()]) keys[defaultEnvName()] = cfg.api_key;
+  keys[env] = apiKey;
+  const next = { ...cfg, keys };
+  if (env === defaultEnvName()) next.api_key = apiKey;
+  writeJSON(CONFIG_FILE, next, 0o600);
 }
 
-function clearKeyRef() {
-  if (fileExists(CONFIG_FILE)) fs.unlinkSync(CONFIG_FILE);
+// Remove one environment's key, or the whole file when no environment is named.
+function clearKeyRef(envName) {
+  if (!fileExists(CONFIG_FILE)) return;
+  if (!envName) { fs.unlinkSync(CONFIG_FILE); return; }
+  const cfg = readJSON(CONFIG_FILE) || {};
+  if (cfg.keys) delete cfg.keys[envName];
+  if (envName === defaultEnvName()) delete cfg.api_key;
+  const remaining = Object.keys(cfg.keys || {}).length;
+  if (!remaining && !cfg.api_key) fs.unlinkSync(CONFIG_FILE);
+  else writeJSON(CONFIG_FILE, cfg, 0o600);
+}
+
+// Every environment that currently has a key stored.
+function storedKeyEnvs() {
+  const cfg = readJSON(CONFIG_FILE);
+  if (!cfg) return [];
+  const names = new Set(Object.keys(cfg.keys || {}));
+  if (cfg.api_key) names.add(defaultEnvName());
+  return [...names];
 }
 
 // ── ~/.neosmith/state.json — per-harness on/off flags (UI-driven harnesses) ──
@@ -239,35 +310,69 @@ function clonePrior(v) {
   return JSON.parse(JSON.stringify(v));
 }
 
-// Build ledger entries for the pointers `on` is about to write. Each pointer is
-// collapsed to the SHALLOWEST prefix that does not exist yet: if `env` is
-// absent pre-connect, recording `["env"] → ABSENT` removes the whole block on
-// `off`, which also prunes the container NeoSmith created. Otherwise the leaf
-// itself is recorded so sibling user keys are never touched.
+function isEmptyContainer(v) {
+  if (Array.isArray(v)) return v.length === 0;
+  return !!v && typeof v === "object" && Object.keys(v).length === 0;
+}
+
+// Build ledger entries for the pointers `on` is about to write. Every entry
+// records the LEAF and that leaf's prior value, so `off` puts back exactly what
+// was there and leaves every sibling alone.
+//
+// When a pointer's parent block does not exist pre-connect, the shallowest
+// missing prefix is recorded separately as `prune` — the container NeoSmith is
+// about to create. It used to be recorded as the entry itself, collapsing
+// `["env","A"]` down to `["env"] → ABSENT`, which made `off` delete the whole
+// block. That is fine on the day you connect and wrong forever after: any var
+// the user adds to that block while connected goes with it (issue #22). A
+// prune is now conditional — `applyRestore` removes the container only if
+// nothing is left in it once the leaves are restored.
 function planRestore(obj, pointers) {
   const seen = new Set();
   const entries = [];
   for (const pointer of pointers) {
-    let recorded = pointer;
-    for (let i = 1; i <= pointer.length; i++) {
-      const prefix = pointer.slice(0, i);
-      if (getAt(obj, prefix) === ABSENT) { recorded = prefix; break; }
-    }
-    const k = JSON.stringify(recorded);
+    const k = JSON.stringify(pointer);
     if (seen.has(k)) continue;
     seen.add(k);
-    entries.push({ pointer: recorded, prior: clonePrior(getAt(obj, recorded)) });
+    let prune = null;
+    for (let i = 1; i < pointer.length; i++) {
+      const prefix = pointer.slice(0, i);
+      if (getAt(obj, prefix) === ABSENT) { prune = prefix; break; }
+    }
+    const entry = { pointer, prior: clonePrior(getAt(obj, pointer)) };
+    if (prune) entry.prune = prune;
+    entries.push(entry);
   }
   return entries;
 }
 
 // Replay a ledger onto a parsed config. Shallow-first so a parent unset can't
 // wipe a deeper restore that follows it.
+//
+// Ledgers written by an older CLI have no `prune` field and may address a
+// container directly (`["env"] → ABSENT`); unsetting that pointer is still the
+// right move, so both shapes replay through the same loop.
 function applyRestore(obj, entries) {
   const sorted = (entries || []).slice().sort((a, b) => a.pointer.length - b.pointer.length);
   for (const e of sorted) {
     if (e.prior === ABSENT) unsetAt(obj, e.pointer);
     else setAt(obj, e.pointer, clonePrior(e.prior));
+  }
+
+  // Prune the blocks NeoSmith created — but only the ones left empty. A user
+  // who added their own key inside one while connected keeps both the key and
+  // the block. Deepest-first, so an inner block is gone before its parent is
+  // judged on whether anything remains in it.
+  const prunes = [];
+  for (const e of sorted) {
+    if (!e.prune) continue;
+    const k = JSON.stringify(e.prune);
+    if (!prunes.some((p) => p.k === k)) prunes.push({ k, pointer: e.prune });
+  }
+  prunes.sort((a, b) => b.pointer.length - a.pointer.length);
+  for (const p of prunes) {
+    const node = getAt(obj, p.pointer);
+    if (node !== ABSENT && isEmptyContainer(node)) unsetAt(obj, p.pointer);
   }
   return obj;
 }
@@ -298,6 +403,64 @@ function clearRestore(harnessId) {
   writeState(state);
 }
 
+// ── Post-write fingerprint (issue #22) ──────────────────────────────────────
+// The sha256 of a config file exactly as `on` left it. This is the only thing
+// that can tell `off` apart the two situations it must handle differently:
+// a file nobody touched since connecting (restore the snapshot verbatim) and a
+// file the user has since edited (keep their edits, remove only our keys).
+//
+// Unlike the snapshot and the ledger this is deliberately NOT write-once —
+// every `on` rewrites the file, so every `on` must re-stamp the hash, or a
+// second `on` would leave `off` believing the user had edited the file.
+function hashFile(filePath) {
+  try {
+    return crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
+  } catch { return null; }
+}
+
+function recordFingerprint(harnessId, filePath) {
+  const digest = hashFile(filePath);
+  if (!digest) return null;
+  const state = readState();
+  state.fingerprints = state.fingerprints || {};
+  state.fingerprints[harnessId] = state.fingerprints[harnessId] || {};
+  state.fingerprints[harnessId][filePath] = digest;
+  writeState(state);
+  return digest;
+}
+
+function readFingerprint(harnessId, filePath) {
+  const state = readState();
+  const f = (state.fingerprints && state.fingerprints[harnessId]) || {};
+  return f[filePath] || null;
+}
+
+function clearFingerprint(harnessId, filePath) {
+  const state = readState();
+  if (!state.fingerprints || !state.fingerprints[harnessId]) return;
+  if (filePath) delete state.fingerprints[harnessId][filePath];
+  else delete state.fingerprints[harnessId];
+  if (state.fingerprints[harnessId] && !Object.keys(state.fingerprints[harnessId]).length) {
+    delete state.fingerprints[harnessId];
+  }
+  if (!Object.keys(state.fingerprints).length) delete state.fingerprints;
+  writeState(state);
+}
+
+// Has this file changed since `on` wrote it?
+//
+// No recorded fingerprint means we cannot know — a connect made by a CLI older
+// than this one, which is exactly the long-lived connection most likely to have
+// been edited. So "unknown" counts as DRIFTED: the merge path is correct
+// whether or not the file was touched, while guessing "untouched" is the
+// guess that destroys work.
+function fileDrifted(harnessId, filePath) {
+  const recorded = readFingerprint(harnessId, filePath);
+  if (!recorded) return true;
+  const now = hashFile(filePath);
+  return now === null || now !== recorded;
+}
+
 // T4: appendAuditLog is exported so commands (`neosmith log`) and tests can
 // emit events that go through the same funnel. The redaction + write-after
 // contract lives here, so emitting-from-elsewhere is just a call.
@@ -307,9 +470,11 @@ module.exports = {
   ensureDir, fileExists, readText, readJSON, writeText, writeJSON,
   snapshot, restoreSnapshot, clearSnapshot, snapshotPath, hasSnapshot,
   appendAuditLog,
-  readKeyRef, writeKeyRef, clearKeyRef,
+  readKeyRef, writeKeyRef, clearKeyRef, storedKeyEnvs,
   readState, writeState, setHarnessFlag, getHarnessFlag,
   // Restore ledger (issue #15)
   ABSENT, getAt, setAt, unsetAt, planRestore, applyRestore,
   recordRestore, readRestore, clearRestore,
+  // Post-write fingerprint (issue #22)
+  hashFile, recordFingerprint, readFingerprint, clearFingerprint, fileDrifted,
 };

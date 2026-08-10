@@ -76,7 +76,7 @@ neosmith claude on      # Claude Code
 Restart Claude Code for the change to take effect.
 ```
 
-Swap `claude` for any harness: `codex`, `continue`, `cline`, `jetbrains`, `copilot`, `zed`, `cursor`. For the UI-driven ones (`cline`, `jetbrains`, `cursor`), `on` prints the exact values to paste into the tool's settings — see [UI-driven harnesses](#ui-driven-harnesses-copilot-cline-jetbrains-cursor) below.
+Swap `claude` for any harness: `codex`, `continue`, `cline`, `jetbrains`, `copilot`, `zed`, `cursor`. For the UI-driven ones (`jetbrains`, `cursor`), `on` prints the exact values to paste into the tool's settings — see [UI-driven harnesses](#ui-driven-harnesses-copilot-jetbrains-cursor) below.
 
 **Now fully quit and reopen the tool** — it only reads the new config on a fresh session.
 
@@ -112,7 +112,7 @@ If a harness shows `pass`, you're done. Open the tool, send any prompt, and you 
 |---|---|
 | `neosmith login [key]` | Store + verify a key (prompts to paste if omitted). |
 | `neosmith <harness> on [--model X] [--autocomplete]` | Connect a harness. Snapshots pre-state for `off`. |
-| `neosmith <harness> off` | Restore a harness's pre-connect config (byte-for-byte for file-writable harnesses). |
+| `neosmith <harness> off` | Restore a harness's pre-connect config, keeping any edits you made while connected. |
 | `neosmith <harness> status` | Show one harness's on/off state + model. |
 | `neosmith status` | Show all harnesses + stored key, and which of your settings files are backed up. |
 | `neosmith originals [--show <harness>] [--export <dir>] [--json]` | Show where your pre-connect settings are stored, read one, or copy them all out. |
@@ -137,13 +137,13 @@ Every command supports `--help`. Run `neosmith help` or `neosmith <harness> help
 | **Claude Code** | `neosmith claude` | `~/.claude/settings.json` (0600) + VS Code/Cursor `claudeCode.*` if the extension is installed | `ANTHROPIC_AUTH_TOKEN` literal (0600) | Restart after |
 | **Codex** | `neosmith codex` | `~/.codex/config.toml` (0600) | `$OPENAI_API_KEY` (env-key ref) | Restart after; export the printed line |
 | **Continue** | `neosmith continue` | `~/.continue/config.yaml` (0600) | `apiKey` literal (0600) | Reload VS Code window |
-| **Cline** | `neosmith cline` | *(none — UI-driven)* | Cline extension storage | Paste into Cline's gear-icon UI |
+| **Cline** | `neosmith cline` | `~/.cline/data/settings/providers.json` + `models.json` (0600) — read by Cline 4.x in VS Code/JetBrains **and** the standalone Cline CLI | `apiKey` literal (0600) | Reload the Cline panel |
 | **JetBrains AI** | `neosmith jetbrains` | *(none — UI-driven)* | JetBrains IDE storage | Paste into Settings UI |
 | **Copilot Chat** | `neosmith copilot` | VS Code `chatLanguageModels.json` (key in OS-keychain) | OS-keychain (SecretStorage) | Reload window; paste key in picker once |
 | **Zed** | `neosmith zed` | `~/.config/zed/settings.json` (0600) | literal (0600) | Restart Zed |
 | **Cursor** | `neosmith cursor` | *(none — native BYOK is UI-only, needs Cursor Pro/Ultra)* | Cursor's encrypted, server-synced BYOK store (not `settings.json`) | Enter in Cursor → Settings → Models; or use `neosmith claude on` + the Claude Code extension |
 
-Every harness supports `on`, `off`, `status`, and `help`. `off` restores your pre-connect configuration — file-based harnesses **byte-for-byte** from a snapshot under `~/.neosmith/snapshots/`, and the UI-driven ones by clearing the on-flag and telling you what to switch back in the IDE.
+Every harness supports `on`, `off`, `status`, and `help`. `off` restores your pre-connect configuration — file-based harnesses from a snapshot under `~/.neosmith/snapshots/`, and the UI-driven ones by clearing the on-flag and telling you what to switch back in the IDE.
 
 ### Your existing settings are merged, never clobbered
 
@@ -152,6 +152,9 @@ For every file-writable harness:
 - **`on` merges.** Variables you defined yourself are left exactly as they are. Only the NeoSmith-owned keys are added or overwritten — including inside list-shaped settings like `claudeCode.environmentVariables`, which is merged **by variable name**, so your own `HTTPS_PROXY` (or anything else) stays put.
 - **The pre-connect snapshot is taken once.** Re-running `on` — to switch tiers with `--model`, or just by accident — refreshes the config but never overwrites the baseline captured the first time. `off` therefore restores what you had *before you ever connected*, not what the previous `on` left behind.
 - **`off` restores, it doesn't just delete.** Alongside the snapshot, `on` records each key's prior value in `~/.neosmith/state.json`. If the snapshot is gone (you cleaned `~/.neosmith`, or moved machines), `off` replays that ledger: your values come back and only the keys NeoSmith introduced are removed.
+- **Edits you make *while connected* survive `off` too.** `on` also stamps a checksum of the file as it left it. If nothing has changed since, `off` puts the pre-connect file back **byte-for-byte** — formatting, comments and key order included. If you *have* edited it — a new hook, a permission, a proxy variable, another provider — `off` keeps your file and takes back only the keys NeoSmith owns. Your work is never the price of disconnecting.
+
+Which keys are NeoSmith's is stated where you can see it: `on` prints them, and in `~/.codex/config.toml` they sit inside a commented **NeoSmith managed block**. Keep your own settings outside that block — anything in it is rewritten by `on` and deleted by `off`.
 
 `npm run smoke` rehearses all of this against a throwaway `HOME` and saves before/wired/after copies you can diff yourself.
 
@@ -183,25 +186,32 @@ Claude Code lists two entries when the IDE extension is wired — the CLI config
 
 **These copies don't last forever.** `off` puts the file back and consumes the copy; `neosmith uninstall` deletes `~/.neosmith` outright. Both name what they're about to remove before asking you to confirm. If you want a copy that survives, export it first.
 
-### UI-driven harnesses (Copilot, Cline, JetBrains, Cursor)
+### Cline: one file, every surface
+
+Cline is a single product with three front ends — the VS Code extension, the JetBrains plugin, and the standalone `cline` CLI — and since 4.x they share one global config:
+
+```
+($CLINE_DIR || ~/.cline)/data/settings/providers.json   # provider, key, model, baseUrl
+($CLINE_DIR || ~/.cline)/data/settings/models.json      # context window + capabilities
+```
+
+`neosmith cline on` writes both, registers the `openai-compatible` provider, and sets `lastUsedProvider` so the provider it wrote is the one Cline actually uses — a wired-but-unselected provider is a no-op, and `neosmith cline status` says so explicitly if you switch away in the UI later. `CLINE_PROVIDER_SETTINGS_PATH` relocates `providers.json`; the CLI follows it.
+
+Your other providers and their settings are merged, not replaced, and `off` restores the pre-connect file byte-for-byte — including which provider was selected.
+
+> **Cline 3.x:** provider config lived in VS Code's extension state (`state.vscdb`), which no CLI can safely write. `on` still prints the paste-in values for that case — API Provider **OpenAI Compatible**, Base URL `https://router.neosmith.ai/v1`, your key, Model ID `neosmith.intelligent-pro`, with streaming and tool calling enabled.
+
+### UI-driven harnesses (Copilot, JetBrains, Cursor)
 
 Some harnesses don't expose a config file the CLI can write to — their key lives inside the tool's UI or its OS-keychain. For these, `neosmith <harness> on` writes what it can and **prints the remaining manual step**.
 
-**GitHub Copilot Chat** (partial-UI): `on` writes `chatLanguageModels.json` with the NeoSmith provider entry, but sets `apiKey` to `${input:neosmithApiKey}` because VS Code stores real keys in OS-keychain SecretStorage. You then restart VS Code → Copilot Chat → model picker → **Manage Language Models** → pick **NeoSmith** → paste your key when prompted. Confirm with `neosmith copilot status --confirmed`. `neosmith copilot status` reports three states: `off` / `models-written` (key not yet entered) / `on` (confirmed).
+**GitHub Copilot Chat** (partial-UI): `on` writes VS Code's own `chatLanguageModels.json` — which lives at the **profile root** (`%APPDATA%\Code\User\` on Windows, `~/Library/Application Support/Code/User/` on macOS, `~/.config/Code/User/` on Linux), *not* in the extension's `globalStorage`. VS Code keeps one copy per profile, so `on` writes the default profile plus every named profile under `profiles/` that doesn't inherit language models from it; otherwise a user on a named profile gets an empty model picker. The file is a top-level **array** of provider entries, with the endpoint as `url` on each *model*.
 
-**Cline** (fully UI-driven): `on` writes nothing. It prints:
+`apiKey` is deliberately left unset. VS Code mints its own SecretStorage handle when you enter the key — verified against a live build, it rewrites the file and appends `"apiKey": "${input:chat.lm.secret.<hash>}"`, leaving everything else as written. The hash is **per entry**, not global (the same router URL in a second profile gets a different one), so a handle can never be copied between profiles or synthesized — an invented `${input:…}` name is not something VS Code resolves.
 
-```
-Open Cline's settings (gear icon in the Cline panel) and set:
-  API Provider:  OpenAI Compatible
-  Base URL:      https://router.neosmith.ai/v1
-  API Key:       sk-plus-yourname-xxxxxx
-  Model ID:      neosmith.intelligent-pro
+So: restart VS Code → Copilot Chat → model picker → **Manage Language Models** → pick **NeoSmith** → paste your key when prompted. Do this **once per profile** — a key entered in one profile does not carry to another.
 
-Enable streaming + tool/function calling (required for Cline's agentic actions).
-```
-
-Open the Cline panel → gear icon → paste each value → save.
+`neosmith copilot status` reports three states: `off` / `models-written` (entry registered, no key handle yet) / `on` (VS Code has stamped a handle onto the entry). The third state is detected from disk — no confirmation step needed — and names any profile whose key is still outstanding. `--confirmed` remains as a manual override for builds that store the reference elsewhere. Note that a handle proves a key was *entered*, not that it is *valid*; `neosmith doctor` is what round-trips it against the router.
 
 **JetBrains AI Assistant** (fully UI-driven): `on` prints the values to paste into **Settings → Tools → AI Assistant → Providers & API Keys** (OpenAI-compatible, URL `https://router.neosmith.ai/v1`, tool calling enabled), plus the recommended per-feature model assignments (Chat → pro, inline/commit → lite, test/doc → basic). Works in IntelliJ, PyCharm, GoLand, WebStorm, Rider, CLion, DataGrip, RubyMine, RustRover, PhpStorm, and JetBrains Air.
 
@@ -275,20 +285,28 @@ Change tiers any time by re-running `on` with a new `--model`. The CLI updates o
 }
 ```
 
-`on` **merges** into `~/.claude/settings.json` — your existing `permissions`, `hooks`, MCP config, and any env vars of your own are preserved. The pre-connect file is snapshotted to `~/.neosmith/snapshots/claude.bak` so `off` restores it byte-for-byte. If the **Claude Code IDE extension** is installed in VS Code and/or Cursor, `on` also writes the `claudeCode.*` block into that editor's `settings.json`, snapshotted/restored the same way; `claudeCode.environmentVariables` is merged **by variable name**, so entries you added yourself survive. File mode `0600`.
+`on` **merges** into `~/.claude/settings.json` — your existing `permissions`, `hooks`, MCP config, and any env vars of your own are preserved. The pre-connect file is snapshotted to `~/.neosmith/snapshots/claude.bak`, and `off` restores it byte-for-byte unless you have edited the file since connecting, in which case it keeps your file and removes only the keys `on` printed as NeoSmith-managed. If the **Claude Code IDE extension** is installed in VS Code and/or Cursor, `on` also writes the `claudeCode.*` block into that editor's `settings.json`, snapshotted/restored the same way; `claudeCode.environmentVariables` is merged **by variable name** on the way in *and* unmerged by name on the way out, so entries you added yourself survive both. File mode `0600`.
 
 ### Codex
 
 ```toml
-model = "neosmith.intelligent-pro"
-model_provider = "neosmith"
+model = "neosmith.intelligent-pro"  # NeoSmith managed - see the block below
+model_provider = "neosmith"  # NeoSmith managed - see the block below
 
+# --------------------------------------------------------------------------
+# NeoSmith managed block - please don't put your own settings in here.
+# `neosmith codex off` deletes exactly these lines and puts back whatever was
+# here before. Anything you add ELSEWHERE in this file is kept when you
+# disconnect, so that is where your own settings belong.
+# --------------------------------------------------------------------------
 [model_providers.neosmith]
 name = "NeoSmith"
 base_url = "https://router.neosmith.ai/v1"
 env_key = "OPENAI_API_KEY"
 wire_api = "responses"
 ```
+
+Your other providers, top-level settings and comments are merged around that block, not replaced. `off` removes exactly the marked lines and restores the `model` / `model_provider` you had before — everything you added to the file since connecting, comments included, stays where you put it.
 
 Codex reads the key from `$OPENAI_API_KEY` at runtime, so `on` also prints the export line for your shell profile:
 
@@ -333,9 +351,11 @@ Run `neosmith doctor` first — it gives one sentence per failed harness explain
 |---|---|
 | Tool still uses the old model | Fully restart the harness. In Claude Code, exit and `claude --resume <id>` keeps the resumed session's original config — start a fresh `claude` instead. |
 | `claude off` didn't restore my config | `off` restores from `~/.neosmith/snapshots/claude.bak` (created on the first `on` and never overwritten by later ones). If you deleted it, `off` falls back to the restore ledger in `~/.neosmith/state.json` and puts your prior values back; your other settings stay either way. |
+| `off` didn't put my file back *exactly* | By design, if you edited it while connected. `off` only replaces the file wholesale when it is byte-identical to what `on` wrote; otherwise it keeps your version and removes just the NeoSmith keys, so your edits aren't lost. The untouched original is in `~/.neosmith/snapshots/` until `off` runs — `neosmith originals --export <dir>` copies it out first. |
 | Codex: `400 Unknown model` | Use `neosmith.intelligent-pro`, not a `gpt-*` name. The router only knows NeoSmith SKUs and the Claude family ids. |
 | Continue: `404` or no response | Ensure `apiBase` ends in `/v1` (the CLI does this for you; if you hand-edited `~/.continue/config.yaml`, check that line). |
-| Cline / JetBrains / Cursor: `on` didn't change anything | These are UI-driven — `on` prints the exact values to paste. Look between the `──` banner and the `✓` line, then paste them into the tool's settings UI. |
+| JetBrains / Cursor: `on` didn't change anything | These are UI-driven — `on` prints the exact values to paste. Look between the `──` banner and the `✓` line, then paste them into the tool's settings UI. |
+| Cline: `on` wrote the file but nothing changed in the panel | Two causes. On Cline 3.x the provider lives in VS Code's extension state, so paste the values `on` printed instead. On 4.x, reload the Cline panel, then check `neosmith cline status` — if it says *NOT the active provider*, something switched `lastUsedProvider` after the connect; re-run `neosmith cline off && neosmith cline on`. |
 | Cursor: wrote `cursor.models.*` to `settings.json`, nothing changed | Expected — Cursor ignores those keys (native BYOK is encrypted + server-synced, needs Pro/Ultra). Use the Settings → Models UI, or `neosmith claude on` + the Claude Code extension. |
 | Copilot: `neosmith copilot status` says `models-written` forever | You haven't entered the key in VS Code yet. Copilot Chat → Models → Manage Language Models → pick NeoSmith → paste key. Then `neosmith copilot status --confirmed`. |
 | macOS GUI app doesn't see the env vars | GUI apps read `~/.zprofile` (or `~/.zshenv`), not `~/.zshrc`. Launch the IDE from a terminal, or put the `export OPENAI_API_KEY=…` line in `~/.zprofile`. |

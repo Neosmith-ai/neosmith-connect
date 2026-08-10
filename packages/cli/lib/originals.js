@@ -30,22 +30,38 @@ function tilde(p) {
   return p;
 }
 
-// Editor-extension snapshots use a compound id (claude-ext-vscode). Split it
-// back into the harness it belongs to plus the editor.
+// Compound snapshot ids name a second file the harness owns:
+//   claude-ext-vscode        — the editor extension's settings
+//   copilot-profile-2ceb44ea — one VS Code profile's chatLanguageModels.json
+//   cline-file-models        — a second config file in the same directory
+// Split any of them back into the harness it belongs to plus the qualifier.
 function splitId(harnessId) {
-  const at = harnessId.indexOf("-ext-");
-  if (at === -1) return { baseId: harnessId, editor: null };
-  return { baseId: harnessId.slice(0, at), editor: harnessId.slice(at + "-ext-".length) };
+  const ext = harnessId.indexOf("-ext-");
+  if (ext !== -1) {
+    return { baseId: harnessId.slice(0, ext), editor: harnessId.slice(ext + "-ext-".length), profile: null, file: null };
+  }
+  const prof = harnessId.indexOf("-profile-");
+  if (prof !== -1) {
+    return { baseId: harnessId.slice(0, prof), editor: null, profile: harnessId.slice(prof + "-profile-".length), file: null };
+  }
+  const file = harnessId.indexOf("-file-");
+  if (file !== -1) {
+    return { baseId: harnessId.slice(0, file), editor: null, profile: null, file: harnessId.slice(file + "-file-".length) };
+  }
+  return { baseId: harnessId, editor: null, profile: null, file: null };
 }
 
 const EDITOR_NAMES = { vscode: "VS Code", cursor: "Cursor" };
+const FILE_NAMES = { models: "model catalog" };
 
 function labelFor(harnessId) {
-  const { baseId, editor } = splitId(harnessId);
+  const { baseId, editor, profile, file } = splitId(harnessId);
   let base = baseId;
   try { base = (harness.get(baseId) || {}).name || baseId; } catch { /* registry unavailable */ }
-  if (!editor) return base;
-  return `${base} · ${EDITOR_NAMES[editor] || editor} extension`;
+  if (editor) return `${base} · ${EDITOR_NAMES[editor] || editor} extension`;
+  if (profile) return `${base} · profile ${profile}`;
+  if (file) return `${base} · ${FILE_NAMES[file] || file}`;
+  return base;
 }
 
 // Most recent snapshot entry for this id in the audit log. This is the
@@ -81,8 +97,8 @@ function sourceFor(harnessId, tombstonePath) {
   const audited = sourceFromAuditLog(harnessId);
   if (audited) return audited;
 
-  const { baseId, editor } = splitId(harnessId);
-  if (!editor) {
+  const { baseId, editor, profile, file } = splitId(harnessId);
+  if (!editor && !profile && !file) {
     try {
       const mod = harness.get(baseId);
       if (mod && mod.configFile) return mod.configFile;

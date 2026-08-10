@@ -1,7 +1,7 @@
 {
   "name": "@neosmithai/cli",
-  "version": "0.8.0",
-  "description": "Route AI coding agents (Claude Code, Codex, Continue, Cline, JetBrains AI) through the NeoSmith router — same experience, ~60% lower inference cost.",
+  "version": "0.8.1",
+  "description": "Route AI coding agents (Claude Code, Codex, Continue, Cline, JetBrains AI) through the NeoSmith router \u2014 same experience, ~60% lower inference cost.",
   "keywords": [
     "claude",
     "claude-code",
@@ -31,6 +31,7 @@
   "files": [
     "bin/",
     "lib/",
+    "contract/",
     "harnesses.json",
     "install.sh",
     "install.ps1",
@@ -41,7 +42,9 @@
     "test:all": "node scripts/run-contract.js",
     "smoke": "node scripts/smoke.js",
     "smoke:ci": "node scripts/smoke.js --quiet",
-    "install-hook": "node scripts/install-hook.js"
+    "install-hook": "node scripts/install-hook.js",
+    "test:router-facing": "node scripts/run-contract.js --only router-contract,models,env",
+    "e2e:offline": "node scripts/e2e/offline.js"
   },
   "engines": {
     "node": ">=18"

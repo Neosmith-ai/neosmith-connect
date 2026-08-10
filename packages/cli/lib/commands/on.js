@@ -9,12 +9,13 @@ const key = require("../key");
 const ui = require("../ui");
 
 function parseFlags(args) {
-  const out = { model: null, autocomplete: false, positional: [] };
+  const out = { model: null, autocomplete: false, force: false, positional: [] };
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === "--model" || a === "-m") { out.model = args[++i]; continue; }
     if (a.startsWith("--model=")) { out.model = a.slice("--model=".length); continue; }
     if (a === "--autocomplete" || a === "--ac") { out.autocomplete = true; continue; }
+    if (a === "--force" || a === "-f") { out.force = true; continue; }
     if (a === "--key" || a === "-k") { out.key = args[++i]; continue; }
     if (a.startsWith("--key=")) { out.key = a.slice("--key=".length); continue; }
     out.positional.push(a);
@@ -29,11 +30,15 @@ async function run(args) {
   const mod = harness.get(h.toLowerCase());
   if (!mod) ui.die(`Unknown harness: ${h}. Supported: ${harness.ids().join(", ")}.`);
 
-  const apiKey = await key.resolveKey(flags.key);
+  const active = harness.envInfo();
+  const apiKey = await key.resolveKey(flags.key, active.keyEnv);
   const model = harness.resolveModel(flags.model);
 
-  ui.banner(`${mod.name} → on`);
-  const ctx = { key: apiKey, model, autocomplete: flags.autocomplete, routerUrl: harness.ROUTER_URL };
+  ui.banner(`${mod.name} → on · env=${active.name} (${active.baseUrl})`);
+  // ctx carries environment *metadata*. The URL a harness writes still comes
+  // from harness.OPENAI_BASE_URL / harness.ROUTER_URL, which are now lazy and
+  // process-wide — so off/status get the right value without threading it.
+  const ctx = { key: apiKey, model, autocomplete: flags.autocomplete, force: flags.force, env: active };
   const res = mod.on(ctx);
 
   if (res && res.alreadyOn) {

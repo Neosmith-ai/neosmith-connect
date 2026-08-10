@@ -13,7 +13,10 @@
 // the --model flag.
 //
 // MERGE never clobber: pre-existing env, permissions, hooks, MCP config are
-// preserved. `off` restores from the byte-for-byte snapshot taken before `on`.
+// preserved. `off` restores from the byte-for-byte snapshot taken before `on` —
+// unless the file changed in the meantime, in which case it keeps what the user
+// wrote while connected and removes only NeoSmith's own keys (issue #22; the
+// decision lives in lib/preserve.js).
 
 "use strict";
 
@@ -22,9 +25,17 @@ const os = require("os");
 const path = require("path");
 const harness = require("../harness");
 const io = require("../io");
+const preserve = require("../preserve");
 const ui = require("../ui");
 
 const CONFIG = path.join(io.HOME, ".claude", "settings.json");
+
+// The environment this invocation is acting as. `on` receives it on ctx;
+// `off`/`status` are called with a bare {} from several call sites, so fall
+// back to the process-wide resolution rather than assuming ctx is populated.
+function activeEnvName(ctx) {
+  return (ctx && ctx.env && ctx.env.name) || harness.envName();
+}
 
 // ── Claude Code IDE extension wiring ────────────────────────────────────────
 // In addition to the CLI config (~/.claude/settings.json), we detect the
@@ -84,12 +95,67 @@ function claudeCodeEditorSettings(key, tierMap, existing) {
   };
 }
 
+const ENV_VARS_KEY = "claudeCode.environmentVariables";
+
 function claudeCodeEditorKeys() {
   return [
     "claudeCode.preferredLocation",
     "claudeCode.disableLoginPrompt",
-    "claudeCode.environmentVariables",
+    ENV_VARS_KEY,
   ];
+}
+
+// The names — not the values — NeoSmith owns inside the editor env array.
+function neosmithEditorEnvNames(tierMap) {
+  return new Set(neosmithEditorEnvVars("", tierMap).map((e) => e.name));
+}
+
+// The inverse of mergeEditorEnvVars, applied ELEMENT-WISE.
+//
+// The ledger holds the whole pre-connect array, and setting it back wholesale
+// would drop every variable the user added to the array while connected — the
+// same clobber issue #15 fixed on the way in, now on the way out (issue #22).
+// So each entry is judged by name:
+//
+//   name NeoSmith owns, present pre-connect → the user's own value comes back
+//   name NeoSmith owns, not present before  → NeoSmith introduced it; drop it
+//   anything else                           → left exactly where it is
+function unmergeEditorEnvVars(liveVars, priorVars, neoNames) {
+  const prior = new Map(
+    (Array.isArray(priorVars) ? priorVars : [])
+      .filter((e) => e && typeof e === "object")
+      .map((e) => [e.name, e]),
+  );
+  const out = [];
+  for (const entry of Array.isArray(liveVars) ? liveVars : []) {
+    if (!entry || typeof entry !== "object" || !neoNames.has(entry.name)) {
+      out.push(entry);
+      continue;
+    }
+    if (prior.has(entry.name)) out.push({ ...prior.get(entry.name) });
+  }
+  return out;
+}
+
+// Replay an editor ledger, handing the env array to unmergeEditorEnvVars
+// instead of letting applyRestore overwrite it as one opaque value.
+function unmergeEditorSettings(cfg, ledger, tierMap) {
+  const scalarEntries = [];
+  let envEntry = null;
+  for (const e of ledger) {
+    if (e.pointer.length === 1 && e.pointer[0] === ENV_VARS_KEY) envEntry = e;
+    else scalarEntries.push(e);
+  }
+  io.applyRestore(cfg, scalarEntries);
+
+  if (!envEntry) return cfg;
+  const priorVars = envEntry.prior === io.ABSENT ? [] : envEntry.prior;
+  const kept = unmergeEditorEnvVars(cfg[ENV_VARS_KEY], priorVars, neosmithEditorEnvNames(tierMap));
+  // An array NeoSmith created and the user never added to goes away entirely;
+  // one that still holds their variables stays.
+  if (kept.length) cfg[ENV_VARS_KEY] = kept;
+  else delete cfg[ENV_VARS_KEY];
+  return cfg;
 }
 
 const EDITORS = ["vscode", "cursor"];
@@ -136,36 +202,56 @@ function wireEditor(editor, settingsPath, key, tierMap) {
   const id = `claude-ext-${editor}`;
   io.ensureDir(path.dirname(settingsPath));
   const existing = io.readJSON(settingsPath) || {};
-  const already = existing["claudeCode.environmentVariables"] &&
-    JSON.stringify(existing["claudeCode.environmentVariables"]).includes("router.neosmith.ai");
+  const already = editorWiredEnv(existing) !== null;
   io.snapshot(id, settingsPath);
   io.recordRestore(id, settingsPath, io.planRestore(existing, claudeCodeEditorKeys().map((k) => [k])));
   const next = { ...existing, ...claudeCodeEditorSettings(key, tierMap, existing) };
   io.writeJSON(settingsPath, next, 0o600);
+  // Stamp the file as we left it, so `off` can tell a settings.json the user
+  // has since edited from one nobody touched (issue #22). Re-stamped on every
+  // `on` — unlike the snapshot and the ledger, this is not write-once.
+  io.recordFingerprint(id, settingsPath);
   return { editor, wrote: true, refreshed: !!already, settingsPath };
 }
 
-// Undo one editor's claudeCode.* block (restore snapshot, else replay the
-// ledger, else strip the keys we know we write).
-function unwireEditor(editor, settingsPath) {
+// Undo one editor's claudeCode.* block.
+//
+// Untouched since `on` → restore the snapshot byte-for-byte. Edited while
+// connected → keep the user's file and remove only what NeoSmith put in it,
+// down to individual entries in the environmentVariables array (issue #22).
+function unwireEditor(editor, settingsPath, tierMap) {
   const id = `claude-ext-${editor}`;
   if (!io.fileExists(settingsPath)) {
-    io.clearSnapshot(id);
-    io.clearRestore(id);
+    preserve.finish(id, settingsPath);
     return { editor, ok: true, missing: true };
   }
-  const restored = io.restoreSnapshot(id, settingsPath);
-  if (!restored) {
-    const cfg = io.readJSON(settingsPath) || {};
-    const ledger = io.readRestore(id, settingsPath);
-    if (ledger) io.applyRestore(cfg, ledger);
-    else for (const k of claudeCodeEditorKeys()) delete cfg[k];
-    io.writeJSON(settingsPath, cfg, 0o600);
-    io.clearRestore(id);
-    return { editor, ok: true, partial: true };
+
+  if (preserve.disposition(id, settingsPath) === "snapshot") {
+    io.restoreSnapshot(id, settingsPath);
+    preserve.finish(id, settingsPath);
+    return { editor, ok: true, mode: "snapshot" };
   }
-  io.clearRestore(id);
-  return { editor, ok: true };
+
+  const cfg = io.readJSON(settingsPath) || {};
+  const pointers = claudeCodeEditorKeys().map((k) => [k]);
+  const ledger = preserve.ledgerFor(id, settingsPath, pointers, JSON.parse);
+  if (ledger) unmergeEditorSettings(cfg, ledger, tierMap || {});
+  else for (const k of claudeCodeEditorKeys()) delete cfg[k];
+  io.writeJSON(settingsPath, cfg, 0o600);
+  preserve.finish(id, settingsPath);
+  return { editor, ok: true, mode: "merge", partial: !ledger };
+}
+
+// Which NeoSmith environment is ~/.claude/settings.json wired to, if any?
+// Returns an environment name ("prod" / "staging" / …) or null.
+//
+// Ownership is matched against EVERY known environment, not just the active
+// one: `--env staging claude on` followed by a plain `neosmith claude off`
+// must still find and remove the staging wiring, or the user is left silently
+// pointed at staging believing they disconnected.
+function wiredEnvOf(s) {
+  const base = s && s.env && s.env.ANTHROPIC_BASE_URL;
+  return typeof base === "string" ? harness.envForUrl(base) : null;
 }
 
 function hasNeoSmith(s) {
@@ -173,10 +259,10 @@ function hasNeoSmith(s) {
   // var. We no longer sniff the prefix of ANTHROPIC_API_KEY: the router is
   // the authority on key validity, and `on` rewrites the entry anyway, so
   // refusing on shape alone was noise.
-  return s && s.env && (
-    (typeof s.env.ANTHROPIC_BASE_URL === "string" && s.env.ANTHROPIC_BASE_URL.includes("router.neosmith.ai")) ||
-    (typeof s.env.ANTHROPIC_AUTH_TOKEN === "string")
-  );
+  return !!(s && s.env && (
+    wiredEnvOf(s) !== null ||
+    typeof s.env.ANTHROPIC_AUTH_TOKEN === "string"
+  ));
 }
 
 function on(ctx) {
@@ -190,9 +276,25 @@ function on(ctx) {
     io.writeText(CONFIG + ".corrupt", JSON.stringify(existing), 0o600).catch?.(() => {});
   }
 
-  if (hasNeoSmith(existing)) {
-    ui.warn(`${CONFIG} already points at NeoSmith.`);
-    return { alreadyOn: true };
+  const wiredEnv = wiredEnvOf(existing);
+  const active = activeEnvName(ctx);
+
+  // Re-pointing a harness from one environment to another is not a no-op:
+  // io.snapshot and io.recordRestore are both write-once, so a second `on`
+  // would overwrite the live wiring while the snapshot still holds the
+  // *pre-NeoSmith* baseline — after which `off` restores neither environment
+  // deterministically. Refuse unless the user is explicit.
+  if (wiredEnv && wiredEnv !== active && !ctx.force) {
+    ui.die(
+      `Claude Code is already connected to NeoSmith ${wiredEnv} (${existing.env.ANTHROPIC_BASE_URL}).\n` +
+      `  Run \`neosmith claude off\` first, then \`neosmith --env ${active} claude on\`.\n` +
+      `  Or pass --force to re-point it, abandoning the ${wiredEnv} wiring.`,
+    );
+  }
+
+  if (hasNeoSmith(existing) && (!wiredEnv || wiredEnv === active)) {
+    ui.warn(`${CONFIG} already points at NeoSmith (${wiredEnv || active}).`);
+    return { alreadyOn: true, env: wiredEnv || active };
   } else if (existing.env && (existing.env.ANTHROPIC_API_KEY || existing.env.ANTHROPIC_BASE_URL || existing.env.ANTHROPIC_AUTH_TOKEN)) {
     ui.log(ui.c("dim", `Backing up pre-connect config → ~/.claude/settings.json.neosmith-snapshot`));
     io.snapshot("claude", CONFIG);
@@ -229,7 +331,9 @@ function on(ctx) {
   if (!next.advisorModel) next.advisorModel = "opus";
 
   io.writeJSON(CONFIG, next, 0o600);
+  io.recordFingerprint("claude", CONFIG);
   ui.ok(`Wrote ${CONFIG}`);
+  printManagedKeysNote(tierMap);
 
   // ── IDE extension wiring ────────────────────────────────────────────────
   // Detect the Claude Code extension in installed editors and write the
@@ -255,6 +359,24 @@ function on(ctx) {
   }
 
   return { wrote: true, editors: wiredEditors };
+}
+
+// settings.json is strict JSON, so the "these keys are ours" marker cannot live
+// in the file as a comment the way it does in codex's TOML. It is printed here
+// instead: the contract is worth stating once, in the place where the user is
+// looking at what just changed (issue #22).
+function printManagedKeysNote(tierMap) {
+  const slots = Object.keys(tierMap).map((t) => tierMap[t].slot);
+  ui.log("");
+  ui.log(ui.c("dim", `NeoSmith manages these keys in ~/.claude/settings.json — treat them as ours:`));
+  ui.log(ui.c("dim", `  env.ANTHROPIC_BASE_URL, env.ANTHROPIC_AUTH_TOKEN, env.ANTHROPIC_MODEL`));
+  if (slots.length) {
+    ui.log(ui.c("dim", `  env.ANTHROPIC_DEFAULT_{${slots.join(",")}}_MODEL(+_NAME/_DESCRIPTION)`));
+  }
+  ui.log(ui.c("dim", `  model, advisorModel`));
+  ui.log(ui.c("dim", `\`neosmith claude off\` puts those back the way it found them. Anything else`));
+  ui.log(ui.c("dim", `you add or change in this file while connected is kept.`));
+  ui.log("");
 }
 
 // Map a resolved NeoSmith SKU (e.g. neosmith.intelligent-pro) back to the
@@ -296,47 +418,53 @@ function writtenPointers(tierMap) {
 }
 
 function off(ctx) {
+  const tierMap = (harness.manifest() || {}).claudeTierMap || {};
+
   if (!io.fileExists(CONFIG)) {
-    io.clearSnapshot("claude");
-    io.clearRestore("claude");
+    preserve.finish("claude", CONFIG);
     ui.log(`${CONFIG} not present — nothing to disconnect.`);
-    const unwired = unwireAllEditors();
-    return { ok: true, editors: unwired };
+    return { ok: true, editors: unwireAllEditors(tierMap) };
   }
-  let unwired = [];
-  const restored = io.restoreSnapshot("claude", CONFIG);
-  if (!restored) {
-    // No snapshot — replay the ledger so the user's own values come back.
-    const cfg = io.readJSON(CONFIG) || {};
-    const tierMap = (harness.manifest() || {}).claudeTierMap || {};
-    const ledger = io.readRestore("claude", CONFIG);
-    if (ledger) {
-      io.applyRestore(cfg, ledger);
-    } else {
-      // No ledger either (pre-0.8 connect) — strip the keys we know we write.
-      const env = cfg.env || {};
-      for (const k of neoEnvKeys(tierMap)) delete env[k];
-      if (Object.keys(env).length === 0) delete cfg.env;
-      else cfg.env = env;
-      // Strip the top-level defaults only if they point at a NeoSmith tier slot.
-      if (typeof cfg.model === "string" && Object.prototype.hasOwnProperty.call(tierMap, cfg.model)) delete cfg.model;
-      if (typeof cfg.advisorModel === "string" && Object.prototype.hasOwnProperty.call(tierMap, cfg.advisorModel)) delete cfg.advisorModel;
-    }
-    io.writeJSON(CONFIG, cfg, 0o600);
-    io.clearRestore("claude");
-    ui.ok(`Removed NeoSmith keys from ${CONFIG} (no pre-connect snapshot was available).`);
-    unwired = unwireAllEditors();
-    return { ok: true, partial: true, editors: unwired };
+
+  // Nobody touched settings.json since `on` wrote it, and we still hold the
+  // pre-connect bytes — put them back exactly, comments/order/formatting and all.
+  if (preserve.disposition("claude", CONFIG) === "snapshot") {
+    io.restoreSnapshot("claude", CONFIG);
+    preserve.finish("claude", CONFIG);
+    ui.ok(`Restored pre-NeoSmith ${CONFIG} from snapshot.`);
+    return { ok: true, mode: "snapshot", editors: unwireAllEditors(tierMap) };
   }
-  io.clearRestore("claude");
-  ui.ok(`Restored pre-NeoSmith ${CONFIG} from snapshot.`);
-  unwired = unwireAllEditors();
-  return { ok: true, editors: unwired };
+
+  // The file changed after `on` wrote it — a hook, a permission, an MCP server,
+  // an env var of the user's own. Restoring the snapshot here would delete all
+  // of it (issue #22), so keep their file and take back only our own keys.
+  const cfg = io.readJSON(CONFIG) || {};
+  const ledger = preserve.ledgerFor("claude", CONFIG, writtenPointers(tierMap), JSON.parse);
+  if (ledger) {
+    io.applyRestore(cfg, ledger);
+  } else {
+    // Neither ledger nor snapshot to derive one from. Strip the keys we know we
+    // write; a value of the user's that NeoSmith overwrote can't be recovered.
+    const env = cfg.env || {};
+    for (const k of neoEnvKeys(tierMap)) delete env[k];
+    if (Object.keys(env).length === 0) delete cfg.env;
+    else cfg.env = env;
+    // Strip the top-level defaults only if they point at a NeoSmith tier slot.
+    if (typeof cfg.model === "string" && Object.prototype.hasOwnProperty.call(tierMap, cfg.model)) delete cfg.model;
+    if (typeof cfg.advisorModel === "string" && Object.prototype.hasOwnProperty.call(tierMap, cfg.advisorModel)) delete cfg.advisorModel;
+  }
+  io.writeJSON(CONFIG, cfg, 0o600);
+  preserve.finish("claude", CONFIG);
+  ui.ok(ledger
+    ? `Removed the NeoSmith keys from ${CONFIG} — the settings you changed while connected are still there.`
+    : `Removed NeoSmith keys from ${CONFIG} (no pre-connect snapshot or ledger was available).`);
+  return { ok: true, mode: "merge", partial: !ledger, editors: unwireAllEditors(tierMap) };
 }
 
 // Restore every editor we may have wired (whether or not the extension is still
 // installed — a stale snapshot is still restored).
-function unwireAllEditors() {
+function unwireAllEditors(tierMap) {
+  const map = tierMap || (harness.manifest() || {}).claudeTierMap || {};
   const done = [];
   for (const editor of EDITORS) {
     const settingsPath = editorSettingsPath(editor);
@@ -345,26 +473,37 @@ function unwireAllEditors() {
     const id = `claude-ext-${editor}`;
     if (io.hasSnapshot(id) || io.readRestore(id, settingsPath) ||
         (io.fileExists(settingsPath) && editorWiredToNeo(settingsPath))) {
-      unwireEditor(editor, settingsPath);
+      const r = unwireEditor(editor, settingsPath, map);
       done.push(editor);
-      ui.ok(`Restored ${editor} settings.json (claudeCode.* removed).`);
+      ui.ok(r.mode === "merge"
+        ? `Removed claudeCode.* from ${editor} settings.json — your own edits are still there.`
+        : `Restored ${editor} settings.json (claudeCode.* removed).`);
     }
   }
   return done;
 }
 
+// Which environment is this editor's claudeCode.environmentVariables block
+// wired to? Reads the ANTHROPIC_BASE_URL entry by name rather than
+// stringifying the whole array and substring-matching it — the old form also
+// matched a user's own unrelated value that happened to contain the host.
+function editorWiredEnv(cfg) {
+  const ev = (cfg || {})["claudeCode.environmentVariables"];
+  if (!Array.isArray(ev)) return null;
+  const entry = ev.find((e) => e && e.name === "ANTHROPIC_BASE_URL");
+  return entry && typeof entry.value === "string" ? harness.envForUrl(entry.value) : null;
+}
+
 function editorWiredToNeo(settingsPath) {
-  const cfg = io.readJSON(settingsPath) || {};
-  const ev = cfg["claudeCode.environmentVariables"];
-  return !!ev && JSON.stringify(ev).includes("router.neosmith.ai");
+  return editorWiredEnv(io.readJSON(settingsPath) || {}) !== null;
 }
 
 function status(ctx) {
   const cfg = io.fileExists(CONFIG) ? io.readJSON(CONFIG) : null;
   const env = (cfg && cfg.env) || {};
   const neosmith = env.ANTHROPIC_AUTH_TOKEN || env.ANTHROPIC_API_KEY || env.ANTHROPIC_BASE_URL;
-  const pointingAtNeo = (env.ANTHROPIC_BASE_URL || "").includes("router.neosmith.ai");
-  const cliOn = !!(cfg && neosmith && pointingAtNeo);
+  const wiredEnv = harness.envForUrl(env.ANTHROPIC_BASE_URL || "");
+  const cliOn = !!(cfg && neosmith && wiredEnv);
 
   // Which editors have the extension wired to NeoSmith?
   const editors = detectEditorsWithClaudeExt();
@@ -377,6 +516,7 @@ function status(ctx) {
   if (!neosmith) return { on: false, detail: `no Anthropic env keys present · ${extNote}` };
   return {
     on: cliOn,
+    env: wiredEnv,
     detail: cliOn
       ? `model=${env.ANTHROPIC_MODEL || "(unset)"} base=${env.ANTHROPIC_BASE_URL} · ${extNote}`
       : `pointing at non-NeoSmith backend: ${env.ANTHROPIC_BASE_URL || "(base unset)"} · ${extNote}`,
@@ -394,10 +534,15 @@ function help() {
     `the editor's settings.json claudeCode.* block so the extension uses NeoSmith too.`,
     `Key storage: ANTHROPIC_AUTH_TOKEN in settings.json (mode 0600).`,
     ``,
+    `Edits you make while connected are kept: \`off\` restores the pre-connect file`,
+    `byte-for-byte only if nothing has changed since \`on\`. If you have edited it,`,
+    `\`off\` keeps your file and takes back only the keys NeoSmith owns (the`,
+    `ANTHROPIC_* connection vars, the tier ladder, model / advisorModel).`,
+    ``,
     `Examples:`,
     `  neosmith claude on`,
     `  neosmith claude on --model neosmith.intelligent-maestro`,
-    `  neosmith claude off        # restores CLI + editor configs byte-for-byte from snapshots`,
+    `  neosmith claude off        # restores CLI + editor configs, keeping edits you made while on`,
     `  neosmith claude status`,
   ].join("\n");
 }

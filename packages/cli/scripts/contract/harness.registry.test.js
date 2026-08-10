@@ -37,7 +37,7 @@ test("idsSorted returns ids in registryOrder", () => {
 test("MODELS proxy exposes pro / basic / lite from manifest", () => {
   assert.equal(harness.MODELS.pro, "neosmith.intelligent-pro");
   assert.equal(harness.MODELS.basic, "neosmith.intelligent-basic");
-  assert.equal(harness.MODELS.lite, "neosmith.intelligent-lite");
+  assert.equal(harness.MODELS.lite, "neosmith.neolite");
 });
 
 test("resolveModel handles aliases (pro / opus / claude-opus-4 → pro)", () => {
@@ -46,8 +46,10 @@ test("resolveModel handles aliases (pro / opus / claude-opus-4 → pro)", () => 
   assert.equal(harness.resolveModel("claude-opus-4"), "neosmith.intelligent-pro");
   assert.equal(harness.resolveModel("basic"), "neosmith.intelligent-basic");
   assert.equal(harness.resolveModel("sonnet"), "neosmith.intelligent-basic");
-  assert.equal(harness.resolveModel("lite"), "neosmith.intelligent-lite");
-  assert.equal(harness.resolveModel("haiku"), "neosmith.intelligent-lite");
+  assert.equal(harness.resolveModel("lite"), "neosmith.neolite");
+  assert.equal(harness.resolveModel("haiku"), "neosmith.neolite");
+  // The de-listed SKU is still accepted as an input alias.
+  assert.equal(harness.resolveModel("neosmith.intelligent-lite"), "neosmith.neolite");
 });
 
 test("manifest resolution honors NEOSMITH_MANIFEST override", () => {

@@ -34,6 +34,7 @@ A single-glance view of what works where. ✅ = supported and documented · ⚠�
 | **Claude Code** | ✅ | ✅ | ✅ | ✅ |
 | **Codex** (CLI) | ✅ terminal | ✅ terminal | ✅ terminal | ✅ terminal |
 | **Cline** | ✅ ext | ✅ plugin | ✅ ext | ⚠️ if extensible |
+| **Cline** (standalone CLI) | ✅ terminal | ✅ terminal | ✅ terminal | ✅ terminal |
 | **Continue** | ✅ ext | ✅ plugin | ✅ ext | ⚠️ if extensible |
 | **JetBrains AI** | ❌ | ✅ | ❌ | ❌ |
 

@@ -14,7 +14,7 @@ const ui = require("../ui");
 async function run() {
   ui.banner("NeoSmith · models");
 
-  const apiKey = io.readKeyRef();
+  const apiKey = io.readKeyRef(harness.keyEnv());
   if (!apiKey) ui.die("No key stored. Run `neosmith login <key>` first.");
 
   ui.log(ui.c("dim", `Fetching models from ${http.DEFAULT_ROUTER}/v1/models …`));
@@ -74,7 +74,7 @@ function printLocalFallback() {
   const entries = [
     [models.pro,     "NeoSmith Intelligent · Pro · Opus fallback",    "default"],
     [models.basic,   "NeoSmith Intelligent · Basic · Sonnet fallback", ""],
-    [models.lite,    "NeoSmith Intelligent · Lite · SLM-only",        ""],
+    [models.lite,    "NeoSmith NeoLite · 512K · sealed budget tier",  ""],
   ];
   if (models.maestro) {
     entries.push([models.maestro, "NeoSmith Maestro · highest-accuracy agentic coding", ""]);

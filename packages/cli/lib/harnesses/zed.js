@@ -2,8 +2,6 @@
 //
 // Writes Zed's settings.json (per-OS path) with an OpenAI-compatible
 // language_models entry pointing at https://router.neosmith.ai/v1.
-// Merge-never-clobber pattern: snapshot pre-connect, add NeoSmith keys,
-// restore byte-for-byte on off. Follows the same shape as claude.js.
 //
 // Config target (per the build brief T10):
 //   Linux:   ~/.config/zed/settings.json
@@ -12,7 +10,24 @@
 //
 // Zed's settings schema places OpenAI-compatible providers under
 // `language_models.openai`. We set base_url + api_key + default_model.
-
+//
+// Issue #22 contract: `on` snapshots the pre-connect file, stamps a
+// post-write fingerprint, and records the prior values of every pointer it
+// touches (issue #15 — `off` used to delete everything NeoSmith wrote, even
+// settings the user had). `off` branches on whether the file drifted:
+//
+//   • unchanged → byte-for-byte snapshot restore (formatting, comments,
+//     key order all come back).
+//   • changed → keep the user's live file and replay the restore ledger
+//     onto it, taking back only our own keys.
+//   • no ledger at all (a connect made by a CLI older than the ledger or
+//     state.json lost) → fall back to stripping NeoSmith's openai block.
+//
+// `available_models` is an array of named entries (mirrors Continue's
+// `models`), not an opaque value the shared ledger replays. The merge
+// path has to handle it element-wise: a user-added model is preserved, a
+// model NeoSmith overwrote gets the user's own value back, an entry
+// NeoSmith introduced drops out.
 "use strict";
 
 const fs = require("fs");
@@ -21,6 +36,7 @@ const os = require("os");
 
 const harness = require("../harness");
 const io = require("../io");
+const preserve = require("../preserve");
 const ui = require("../ui");
 
 function zedSettingsPath() {
@@ -41,8 +57,8 @@ function hasNeoSmith(s) {
   if (!lm || typeof lm !== "object") return false;
   const openai = lm.openai;
   if (!openai || typeof openai !== "object") return false;
-  return (typeof openai.api_url === "string" && openai.api_url.includes("router.neosmith.ai")) ||
-         (typeof openai.base_url === "string" && openai.base_url.includes("router.neosmith.ai"));
+  // Ownership: matches ANY known environment so `off` finds staging wiring too.
+  return harness.isNeosmithUrl(openai.api_url) || harness.isNeosmithUrl(openai.base_url);
 }
 
 function on(ctx) {
@@ -59,10 +75,11 @@ function on(ctx) {
     return { alreadyOn: true };
   }
 
+  // Snapshot + ledger before mutating `existing`. Both are write-once, so a
+  // second `on` refreshes without losing the pre-connect baseline (issue #15:
+  // this used to re-snapshot the already-NeoSmith config and `off` then
+  // "restored" that).
   io.snapshot("zed", CONFIG);
-  // Ledger the whole openai block: `on` overwrites api_url/api_key and appends
-  // to available_models, so the user's own provider settings can only be put
-  // back wholesale (issue #15 — `off` used to just delete them).
   io.recordRestore("zed", CONFIG, io.planRestore(existing, [["language_models", "openai"]]));
 
   const next = { ...existing };
@@ -85,6 +102,11 @@ function on(ctx) {
   };
 
   io.writeJSON(CONFIG, next, 0o600);
+  // Post-write fingerprint (issue #22): stamp the file as we left it so `off`
+  // can tell a settings.json the user edited from one nobody touched.
+  // Re-stamped on every `on`, not write-once like the snapshot (otherwise a
+  // second `on` to switch tiers would read as drift).
+  io.recordFingerprint("zed", CONFIG);
   ui.ok(`Wrote ${CONFIG}`);
   ui.log(ui.c("dim", `Restart Zed for the change to take effect.`));
   return { wrote: true };
@@ -92,22 +114,40 @@ function on(ctx) {
 
 function off(ctx) {
   if (!io.fileExists(CONFIG)) {
-    io.clearSnapshot("zed");
-    io.clearRestore("zed");
+    preserve.finish("zed", CONFIG);
     ui.log(`${CONFIG} not present — nothing to disconnect.`);
     return { ok: true };
   }
-  const restored = io.restoreSnapshot("zed", CONFIG);
-  if (!restored) {
-    const cfg = io.readJSON(CONFIG) || {};
-    const ledger = io.readRestore("zed", CONFIG);
-    if (ledger) {
-      // Replay the ledger: the user's own api_url/api_key/available_models
-      // come back instead of being deleted outright.
-      io.applyRestore(cfg, ledger);
-      if (cfg.language_models && !Object.keys(cfg.language_models).length) delete cfg.language_models;
-    } else if (cfg.language_models && cfg.language_models.openai) {
-      // No ledger (pre-0.8 connect) — strip the NeoSmith openai block.
+
+  // Nobody touched settings.json since `on` wrote it, and we still hold the
+  // pre-connect bytes — restore them verbatim.
+  if (preserve.disposition("zed", CONFIG) === "snapshot") {
+    io.restoreSnapshot("zed", CONFIG);
+    preserve.finish("zed", CONFIG);
+    ui.ok(`Restored pre-NeoSmith ${CONFIG} from snapshot.`);
+    return { ok: true, mode: "snapshot" };
+  }
+
+  // The file changed after `on` wrote it. Restoring the snapshot here would
+  // delete every indented key, comment or new available_models the user
+  // added (issue #22). Keep their file and take back only what NeoSmith owns.
+  const cfg = io.readJSON(CONFIG) || {};
+  const ledger = preserve.ledgerFor(
+    "zed", CONFIG, [["language_models", "openai"]], (raw) => JSON.parse(raw || "{}"),
+  );
+
+  if (ledger) {
+    // Replay the ledger, treating the `available_models` array element-wise
+    // (mirrors how continue.js handles `models`). Setting the whole pre-connect
+    // block back in one go would clobber every model the user added while
+    // connected.
+    unmergeAvailableModels(cfg, ledger);
+  } else {
+    // No ledger (pre-0.8 connect, or state.json lost). Today's partial
+    // restore: strip the NeoSmith openai keys. A user api_url/api_key that
+    // NeoSmith overwrote cannot be recovered, but a model they added alongside
+    // ours can — we filter `available_models` by name.
+    if (cfg.language_models && cfg.language_models.openai) {
       const o = cfg.language_models.openai;
       delete o.api_url;
       delete o.api_key;
@@ -117,16 +157,81 @@ function off(ctx) {
         if (!o.available_models.length) delete o.available_models;
       }
       if (Object.keys(o).length === 0) delete cfg.language_models.openai;
-      if (Object.keys(cfg.language_models).length === 0) delete cfg.language_models;
+      if (cfg.language_models && Object.keys(cfg.language_models).length === 0) delete cfg.language_models;
     }
-    io.writeJSON(CONFIG, cfg, 0o600);
-    io.clearRestore("zed");
-    ui.ok(`Removed NeoSmith keys from ${CONFIG} (no pre-connect snapshot was available).`);
-    return { ok: true, partial: true };
   }
-  io.clearRestore("zed");
-  ui.ok(`Restored pre-NeoSmith ${CONFIG} from snapshot.`);
-  return { ok: true };
+  io.writeJSON(CONFIG, cfg, 0o600);
+  preserve.finish("zed", CONFIG);
+  ui.ok(ledger
+    ? `Removed the NeoSmith provider from ${CONFIG} — the settings you changed while connected are still there.`
+    : `Removed NeoSmith keys from ${CONFIG} (no pre-connect snapshot or ledger was available).`);
+  return { ok: true, mode: "merge", partial: !ledger };
+}
+
+// Replay a Zed-specific restore ledger onto the parsed settings, treating the
+// openai block's `available_models` array element-wise rather than as one
+// opaque value. Same shape as continue.js's `unmergeByName`, named to match
+// the field on the Zed side.
+//
+//   • available_models entry NeoSmith introduced (no prior with the same
+//     name) → dropped.
+//   • available_models entry the user already had pre-connect → their own
+//     values come back.
+//   • every other key on the openai block, plus the language_models container
+//     itself → handled by the shared applyRestore.
+function unmergeAvailableModels(cfg, ledger) {
+  let modelsEntry = null;
+  const scalars = [];
+  for (const e of ledger) {
+    const p = e.pointer;
+    if (Array.isArray(p) && p.length === 3 && p[0] === "language_models" && p[1] === "openai" && p[2] === "available_models") {
+      modelsEntry = e;
+    } else {
+      scalars.push(e);
+    }
+  }
+
+  io.applyRestore(cfg, scalars);
+
+  if (modelsEntry && cfg.language_models && cfg.language_models.openai) {
+    const priorArr = modelsEntry.prior === io.ABSENT ? [] : modelsEntry.prior;
+    const prior = new Map(
+      (Array.isArray(priorArr) ? priorArr : [])
+        .filter((m) => m && typeof m === "object" && typeof m.name === "string")
+        .map((m) => [m.name, m]),
+    );
+    const live = cfg.language_models.openai.available_models;
+    if (Array.isArray(live)) {
+      const out = [];
+      for (const m of live) {
+        if (!m || typeof m !== "object") { out.push(m); continue; }
+        if (prior.has(m.name)) {
+          // A model the user had pre-connect (same name): restore their values.
+          out.push(JSON.parse(JSON.stringify(prior.get(m.name))));
+          continue;
+        }
+        // A model NeoSmith introduced that has no prior equivalent — including
+        // the entry NeoSmith wrote and any user-added entry — survives only
+        // if it does not look like one of ours. This is the conservative
+        // fallback; the ledger-based path above preserves entries by name,
+        // but without a recorded prior we have nothing to compare against and
+        // so cannot distinguish user-added from NeoSmith-introduced.
+        const isOurs = typeof m.name === "string" && (m.name.startsWith("neosmith.") || ((m.display_name || "").startsWith("NeoSmith ")));
+        if (!isOurs) out.push(m);
+      }
+      if (out.length) cfg.language_models.openai.available_models = out;
+      else delete cfg.language_models.openai.available_models;
+    }
+    // Empty-container prune: a `language_models` block NeoSmith created that
+    // now holds nothing (no other provider keys, no openai, no
+    // available_models) is dropped.
+    if (cfg.language_models.openai && Object.keys(cfg.language_models.openai).length === 0) {
+      delete cfg.language_models.openai;
+    }
+    if (cfg.language_models && Object.keys(cfg.language_models).length === 0) {
+      delete cfg.language_models;
+    }
+  }
 }
 
 function status(ctx) {
@@ -134,13 +239,14 @@ function status(ctx) {
   const cfg = io.readJSON(CONFIG) || {};
   const lm = cfg.language_models || {};
   const openai = lm.openai || {};
-  const pointingAtNeo = (openai.api_url || openai.base_url || "").includes("router.neosmith.ai");
-  if (!pointingAtNeo) return { on: false, detail: "no NeoSmith provider in language_models.openai" };
+  const wiredEnv = harness.envForUrl(openai.api_url || openai.base_url || "");
+  if (!wiredEnv) return { on: false, detail: "no NeoSmith provider in language_models.openai" };
   const models = Array.isArray(openai.available_models)
     ? openai.available_models.map((m) => m.name).join(", ")
     : "(unset)";
   return {
     on: true,
+    env: wiredEnv,
     detail: `models=${models} base=${openai.api_url || openai.base_url}`,
   };
 }

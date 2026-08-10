@@ -14,7 +14,7 @@ async function run(args) {
   if (!mod) ui.die(`Unknown harness: ${h}. Supported: ${harness.ids().join(", ")}.`);
 
   ui.banner(`${mod.name} → off`);
-  mod.off({});
+  mod.off({ env: harness.envInfo() });
   ui.log(ui.c("dim", `Restart ${mod.name} if it was running.`));
 }
 

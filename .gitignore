@@ -21,3 +21,8 @@ Thumbs.db
 
 # Per-OS quirks
 *.swp
+
+# Stray test-config dirs left behind by a run of `neosmith <harness> on`
+# against a real machine — never meant to be checked into the repo.
+.continue/
+.codex/

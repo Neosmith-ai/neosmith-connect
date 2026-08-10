@@ -168,6 +168,28 @@ function runRehearsal(dir) {
     'codex.off({});',
     'save("codex.config.after-off.toml", codexCfg);',
     'console.log("CODEX_RESTORED=" + (read(codexCfg) === codexBefore));',
+    // ── Staging leg ────────────────────────────────────────────────────────
+    // Same rehearsal against a non-default environment. Entirely offline (file
+    // writes only), so it costs nothing and runs in the full CI matrix. What it
+    // proves that the prod leg cannot: the base URL actually follows the
+    // environment, and `off` restores byte-for-byte from a non-default env.
+    'console.log("\\n### STAGING on → status → off ###");',
+    'const envMod = require(cli + "/lib/env");',
+    'const manifest = require(cli + "/lib/manifest").read().manifest;',
+    'const stagingBase = manifest.environments.staging.baseUrl;',
+    'process.env.NEOSMITH_ENV = "staging";',
+    'envMod.reset();',   // the resolver memoizes; drop it so the new env takes
+    'const codeBeforeStaging = read(codeS);',
+    'claude.on({ key: "sk-slm-smoke-XXXXXXXXXXXX", model: h.resolveModel("lite"), env: envMod.current() });',
+    'save("cli.settings.wired.staging.json", cliS);',
+    'const stagingCfg = JSON.parse(read(cliS));',
+    'console.log("STAGING_BASE_OK=" + (stagingCfg.env.ANTHROPIC_BASE_URL === stagingBase));',
+    'const stagingStatus = claude.status({ env: envMod.current() });',
+    'console.log("STAGING_STATUS_ENV=" + stagingStatus.env);',
+    'claude.off({ env: envMod.current() });',
+    'console.log("STAGING_CLI_REMOVED=" + (read(cliS) === "(absent)"));',
+    'console.log("STAGING_EDITOR_RESTORED=" + (read(codeS) === codeBeforeStaging));',
+    'process.env.NEOSMITH_ENV = ""; envMod.reset();',
   ].join("\n"));
 
   const res = spawnSync(process.execPath, [runner, home, dir], { cwd: PKG, encoding: "utf8" });
@@ -212,10 +234,48 @@ function runRehearsal(dir) {
   try {
     const vars = JSON.parse(wiredCode)["claudeCode.environmentVariables"] || [];
     const byName = Object.fromEntries(vars.map((e) => [e.name, e.value]));
+    // Read the expected base from the manifest rather than a literal, so the
+    // rehearsal keeps working when environments are added or renamed.
+    const manifest = require("../lib/manifest").read().manifest;
+    const prodBase = manifest.environments[manifest.defaultEnvironment].baseUrl;
     userVarMerged = byName.HTTPS_PROXY === "http://corp-proxy:8080" &&
-      byName.ANTHROPIC_BASE_URL === "https://router.neosmith.ai";
+      byName.ANTHROPIC_BASE_URL === prodBase;
   } catch { /* left false */ }
   const codexRestored = /CODEX_RESTORED=true/.test(log_);
+
+  // Staging leg.
+  const stagingBaseOk = /STAGING_BASE_OK=true/.test(log_);
+  const stagingStatusEnv = /STAGING_STATUS_ENV=staging/.test(log_);
+  const stagingRestored = /STAGING_CLI_REMOVED=true/.test(log_) &&
+                          /STAGING_EDITOR_RESTORED=true/.test(log_);
+
+  // The cross-environment refusal is asserted through the real binary rather
+  // than in the rehearsal child: it exits the process by design, which would
+  // take the child's remaining legs with it.
+  const crossEnvHome = path.join(dir, "crossenv-home");
+  fs.mkdirSync(path.join(crossEnvHome, ".neosmith"), { recursive: true });
+  fs.writeFileSync(
+    path.join(crossEnvHome, ".neosmith", "config.json"),
+    JSON.stringify({ keys: { prod: "sk-slm-smoke-XXXXXXXXXXXX", staging: "sk-slm-smoke-XXXXXXXXXXXX" } }),
+  );
+  const crossEnv = { ...process.env, HOME: crossEnvHome, USERPROFILE: crossEnvHome, APPDATA: crossEnvHome };
+  delete crossEnv.NEOSMITH_ENV;
+  delete crossEnv.NEOSMITH_BASE_URL;
+  const CLI_BIN = path.join(PKG, "bin", "neosmith.js");
+  const onProd = spawnSync(process.execPath, [CLI_BIN, "claude", "on"], { env: crossEnv, encoding: "utf8" });
+  const onStaging = spawnSync(process.execPath, [CLI_BIN, "--env", "staging", "claude", "on"], { env: crossEnv, encoding: "utf8" });
+  const stillProd = (() => {
+    try {
+      const cfg = JSON.parse(fs.readFileSync(path.join(crossEnvHome, ".claude", "settings.json"), "utf8"));
+      const m = require("../lib/manifest").read().manifest;
+      return cfg.env.ANTHROPIC_BASE_URL === m.environments.prod.baseUrl;
+    } catch { return false; }
+  })();
+  const crossEnvRefused = onProd.status === 0 && onStaging.status !== 0 && stillProd;
+  write(path.join(dir, "crossenv.log"),
+    `on prod exit=${onProd.status}\n${onProd.stdout}${onProd.stderr}\n` +
+    `on staging exit=${onStaging.status}\n${onStaging.stdout}${onStaging.stderr}\n` +
+    `still wired to prod: ${stillProd}\n`);
 
   const checks = [
     ["claude on → status reports on:true", statusOn],
@@ -225,6 +285,10 @@ function runRehearsal(dir) {
     ["off → Cursor settings restored byte-for-byte", cursorRestored],
     ["off → ~/.claude/settings.json removed (was absent pre-connect)", cliRemoved],
     ["codex on → on → off restores the user's config (issue #15)", codexRestored],
+    ["staging: on --env staging writes the staging base URL", stagingBaseOk],
+    ["staging: status names the wired environment", stagingStatusEnv],
+    ["staging: off restores byte-for-byte from a non-default env", stagingRestored],
+    ["cross-env: on refuses to re-point prod→staging and leaves prod intact", crossEnvRefused],
   ];
   const ok = checks.every((c) => c[1]) && res.status === 0;
   return { ok, checks, log: log_ };

@@ -116,18 +116,36 @@ test("restore ledger round-trips prior values and deletes only what was ABSENT",
   assert.deepEqual(wired, before, "applyRestore must reproduce the pre-connect object exactly");
 }));
 
-test("planRestore collapses to the shallowest absent prefix so created blocks are pruned", () => withSandbox(() => {
+test("planRestore records leaves and prunes a block NeoSmith created once it is empty", () => withSandbox(() => {
   delete require.cache[require.resolve("../../lib/io")];
   const io = require("../../lib/io");
 
   const before = { theme: "dark" }; // no `env` block at all
   const entries = io.planRestore(before, [["env", "A"], ["env", "B"]]);
-  assert.deepEqual(entries, [{ pointer: ["env"], prior: io.ABSENT }],
-    "both leaves collapse to a single `env → ABSENT` entry");
+  assert.deepEqual(entries, [
+    { pointer: ["env", "A"], prior: io.ABSENT, prune: ["env"] },
+    { pointer: ["env", "B"], prior: io.ABSENT, prune: ["env"] },
+  ], "each leaf is recorded on its own, with the block NeoSmith creates noted as a prune");
 
   const wired = { theme: "dark", env: { A: "1", B: "2" } };
   io.applyRestore(wired, entries);
-  assert.deepEqual(wired, before, "the whole block NeoSmith created is removed");
+  assert.deepEqual(wired, before, "the block NeoSmith created is removed once nothing is left in it");
+}));
+
+// Issue #22: the same ledger, replayed against a file the user has edited since
+// `on`. Collapsing the two leaves onto `["env"] → ABSENT` used to delete the
+// whole block, taking the user's own variable with it.
+test("planRestore leaves a created block in place when the user has added to it", () => withSandbox(() => {
+  delete require.cache[require.resolve("../../lib/io")];
+  const io = require("../../lib/io");
+
+  const before = { theme: "dark" };
+  const entries = io.planRestore(before, [["env", "A"], ["env", "B"]]);
+
+  const edited = { theme: "dark", env: { A: "1", B: "2", MY_OWN: "keep-me" } };
+  io.applyRestore(edited, entries);
+  assert.deepEqual(edited, { theme: "dark", env: { MY_OWN: "keep-me" } },
+    "only NeoSmith's keys go; the block survives because the user put something in it");
 }));
 
 test("recordRestore is write-once — a second on() cannot overwrite the prior values", () => withSandbox(() => {

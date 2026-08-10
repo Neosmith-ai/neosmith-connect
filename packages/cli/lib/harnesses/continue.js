@@ -22,6 +22,7 @@
 const path = require("path");
 const harness = require("../harness");
 const io = require("../io");
+const preserve = require("../preserve");
 const ui = require("../ui");
 
 const CONFIG_DIR = path.join(io.HOME, ".continue");
@@ -132,9 +133,18 @@ function on(ctx) {
     io.snapshot("continue", CONFIG);
     out = stringMerge(existingText, model, key, withAutocomplete);
     // No parser → no ledger. `off` falls back to the same string surgery.
+    // Do NOT stamp a fingerprint: a user edit would then look like drift on a
+    // file the CLI cannot structurally merge, and `off` would still take the
+    // snapshot path because the ledger is empty. Worst of both.
   }
 
   io.writeText(CONFIG, out, 0o600);
+  if (yaml) {
+    // Stamp the file as we left it, so `off` can tell a config.yaml the user
+    // has since edited from one nobody touched (issue #22). Re-stamped on
+    // every `on` — the fingerprint is deliberately not write-once.
+    io.recordFingerprint("continue", CONFIG);
+  }
   ui.ok(`Wrote ${CONFIG}`);
   if (!withAutocomplete) {
     ui.log(ui.c("dim", `Tip: add --autocomplete to also route inline completions through NeoSmith (intelligent-lite).`));
@@ -144,44 +154,115 @@ function on(ctx) {
 
 function off(ctx) {
   if (!io.fileExists(CONFIG)) {
-    io.clearSnapshot("continue");
-    io.clearRestore("continue");
+    preserve.finish("continue", CONFIG);
     ui.log(`${CONFIG} not present — nothing to disconnect.`);
     return { ok: true };
   }
-  const restored = io.restoreSnapshot("continue", CONFIG);
-  if (!restored) {
-    if (yaml) {
-      let parsed = {};
-      try { parsed = yaml.parse(io.readText(CONFIG) || "") || {}; } catch { parsed = {}; }
-      const ledger = io.readRestore("continue", CONFIG);
-      if (ledger) {
-        // Replay the ledger: the user's own models array / autocomplete model
-        // come back exactly as they were.
-        io.applyRestore(parsed, ledger);
-      } else {
-        if (Array.isArray(parsed.models)) {
-          parsed.models = parsed.models.filter((m) => !(m && m.name === "NeoSmith"));
-        }
-        if (parsed.tabAutocompleteModel && parsed.tabAutocompleteModel.title === "NeoSmith Autocomplete") {
-          delete parsed.tabAutocompleteModel;
-        }
-      }
-      io.writeText(CONFIG, yaml.stringify(parsed), 0o600);
-    } else {
-      // Crude string strip.
-      let text = io.readText(CONFIG) || "";
-      text = text.replace(/\n?\s*-\s+name:\s*NeoSmith[\s\S]*?(?=\n\s*-\s+name:|\ntabAutocompleteModel:|\n[a-z]|$)/g, "");
-      text = text.replace(/\n?tabAutocompleteModel:[\s\S]*?(?=\n[a-z]|$)/g, "");
-      io.writeText(CONFIG, text + "\n", 0o600);
-    }
-    io.clearRestore("continue");
-    ui.ok(`Removed NeoSmith entries from ${CONFIG} (no pre-connect snapshot was available).`);
-    return { ok: true, partial: true };
+
+  // Nobody touched config.yaml since `on` wrote it, and we still hold the
+  // pre-connect bytes — put them back exactly, comments and all. The YAML
+  // library round-trips YAML through `parse → stringify` on every write, so a
+  // snapshot restore is the only way to bring back the user's formatting,
+  // their block ordering, and the order of entries inside `models:`.
+  if (preserve.disposition("continue", CONFIG) === "snapshot") {
+    io.restoreSnapshot("continue", CONFIG);
+    preserve.finish("continue", CONFIG);
+    ui.ok(`Restored pre-NeoSmith ${CONFIG} from snapshot.`);
+    return { ok: true, mode: "snapshot" };
   }
-  io.clearRestore("continue");
-  ui.ok(`Restored pre-NeoSmith ${CONFIG} from snapshot.`);
-  return { ok: true };
+
+  // The file changed after `on` wrote it. Restoring the snapshot here would
+  // delete everything the user added to it while connected (issue #22), so
+  // keep their file and take back only the entries NeoSmith owns.
+  if (yaml) {
+    let parsed = {};
+    try { parsed = yaml.parse(io.readText(CONFIG) || "") || {}; } catch { parsed = {}; }
+    const ledger = preserve.ledgerFor("continue", CONFIG, WRITTEN_POINTERS, (raw) => yaml.parse(raw));
+    if (ledger) {
+      // Replay per-element (not via applyRestore wholesale on `models`): the
+      // ledger records the WHOLE pre-connect array, and setting it back would
+      // wipe the models the user added while connected.
+      unmergeByName(parsed, ledger);
+    } else {
+      // No ledger (a connect made by an older CLI, or state.json lost outside
+      // the .bak). Today's partial-restore: filter NeoSmith entries by name.
+      // A user model NeoSmith overwrote can't be recovered.
+      if (Array.isArray(parsed.models)) {
+        const kept = parsed.models.filter((m) => !(m && m.name === "NeoSmith"));
+        if (kept.length) parsed.models = kept;
+        else delete parsed.models;
+      }
+      if (parsed.tabAutocompleteModel && parsed.tabAutocompleteModel.title === "NeoSmith Autocomplete") {
+        delete parsed.tabAutocompleteModel;
+      }
+    }
+    io.writeText(CONFIG, yaml.stringify(parsed), 0o600);
+    preserve.finish("continue", CONFIG);
+    ui.ok(ledger
+      ? `Removed the NeoSmith entries from ${CONFIG} — the models and settings you changed while connected are still there.`
+      : `Removed NeoSmith entries from ${CONFIG} (no pre-connect snapshot or ledger was available).`);
+    return { ok: true, mode: "merge", partial: !ledger };
+  }
+
+  // No YAML library → string fallback. Today this just strips lines by regex.
+  let text = io.readText(CONFIG) || "";
+  text = text.replace(/\n?\s*-\s+name:\s*NeoSmith[\s\S]*?(?=\n\s*-\s+name:|\ntabAutocompleteModel:|\n[a-z]|$)/g, "");
+  text = text.replace(/\n?tabAutocompleteModel:[\s\S]*?(?=\n[a-z]|$)/g, "");
+  io.writeText(CONFIG, text + "\n", 0o600);
+  // No fingerprint on this branch (see on()'s comment), so disambiguate: no
+  // recorded fingerprint + a real .bak (or none) → merge path. No ledger →
+  // nothing structural to replay; the regex strip above is the entire job.
+  preserve.finish("continue", CONFIG);
+  ui.ok(`Removed the NeoSmith entries from ${CONFIG} (no parser — the user's edits cannot be structurally preserved; restore from ${io.snapshotPath("continue") || "the snapshot"} or rebuild the YAML).`);
+  return { ok: true, mode: "merge", partial: true };
+}
+
+// Replay a YAML-specific restore ledger onto a parsed config, treating
+// `models` as a list of named entries rather than one opaque value.
+//
+// The shared ledger would otherwise set the whole pre-connect `models` array
+// back in one go, overwriting every model the user added while connected. So
+// split that entry out and apply it element-wise:
+//
+//   • name "NeoSmith", present pre-connect        → user's own model comes back
+//   • name "NeoSmith", not present pre-connect    → NeoSmith introduced it; drop
+//   • any other name                              → left exactly where it was
+//
+// The autocomplete model is a single object, so applyRestore handles it.
+function unmergeByName(parsed, ledger) {
+  let modelsEntry = null;
+  const scalars = [];
+  for (const e of ledger) {
+    if (Array.isArray(e.pointer) && e.pointer.length === 1 && e.pointer[0] === "models") {
+      modelsEntry = e;
+    } else {
+      scalars.push(e);
+    }
+  }
+
+  // `tabAutocompleteModel` and any container (models[]) are scalar-only after
+  // the split — applyRestore handles them: ABSENT → unset, anything else →
+  // set back. It does NOT touch individual entries inside the models array;
+  // that is what the loop below is for.
+  io.applyRestore(parsed, scalars);
+
+  if (modelsEntry && Array.isArray(parsed.models)) {
+    const priorModels = modelsEntry.prior === io.ABSENT ? [] : modelsEntry.prior;
+    const prior = new Map(
+      (Array.isArray(priorModels) ? priorModels : [])
+        .filter((m) => m && typeof m === "object" && typeof m.name === "string")
+        .map((m) => [m.name, m]),
+    );
+    const live = parsed.models;
+    const out = [];
+    for (const m of live) {
+      if (!m || typeof m !== "object" || m.name !== "NeoSmith") { out.push(m); continue; }
+      if (prior.has(m.name)) out.push(JSON.parse(JSON.stringify(prior.get(m.name))));
+      // An entry NeoSmith introduced that no prior exists for falls away.
+    }
+    if (out.length) parsed.models = out;
+    else delete parsed.models;
+  }
 }
 
 function status(ctx) {
@@ -190,10 +271,14 @@ function status(ctx) {
   const hasNeo = /name:\s*NeoSmith/.test(text);
   const modelMatch = text.match(/model:\s*(neosmith\.\S+)/);
   const hasAutocomplete = /title:\s*NeoSmith Autocomplete/.test(text);
+  // The YAML is merged as text, so read the apiBase back out to name the env.
+  const baseMatch = text.match(/apiBase:\s*(\S+)/);
+  const wiredEnv = baseMatch ? harness.envForUrl(baseMatch[1]) : null;
   return {
     on: hasNeo,
+    env: wiredEnv,
     detail: hasNeo
-      ? `model=${modelMatch ? modelMatch[1] : "(unset)"}${hasAutocomplete ? " +autocomplete" : ""}`
+      ? `model=${modelMatch ? modelMatch[1] : "(unset)"}${hasAutocomplete ? " +autocomplete" : ""} base=${baseMatch ? baseMatch[1] : "(unset)"}`
       : "no NeoSmith model entry",
   };
 }

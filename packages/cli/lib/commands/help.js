@@ -5,9 +5,23 @@
 const harness = require("../harness");
 const ui = require("../ui");
 
+// Read once at help time, not at module load. The packaged CLI ships
+// node_modules with their own package.json — caching the version at require
+// time would lock it to whatever was at the install root before symlinks
+// resolved, which is the wrong copy on a npm-global install.
+function readVersion() {
+  try { return require("../../package.json").version; }
+  catch { return "unknown"; }
+}
+
+function envNames() {
+  return Object.keys(harness.manifest().environments || {});
+}
+
 function top() {
   ui.banner("NeoSmith CLI");
-  ui.log("  Route AI coding agents through " + ui.c("cyan", "https://router.neosmith.ai") + ".");
+  ui.log(ui.c("dim", `  v${readVersion()}`));
+  ui.log("  Route AI coding agents through " + ui.c("cyan", harness.ROUTER_URL) + ".");
   ui.log("  Same experience, ~60% lower inference cost.");
   ui.log("");
   ui.log(ui.c("bold", "Quick start"));
@@ -38,7 +52,17 @@ function top() {
   ui.log("  --model <sku>     neosmith.intelligent-pro (default) | -basic | -lite | -maestro");
   ui.log("  --autocomplete    (continue only) also route inline completions via -lite");
   ui.log("  --key <key>       use this key instead of the stored one");
-  ui.log("  --dry-run         (global) print what would be written without touching disk");
+  ui.log("  --force           re-point a harness already wired to a different environment");
+  ui.log("");
+  ui.log(ui.c("bold", "Global flags"));
+  ui.log("  --env <name>      which router to talk to: " + envNames().join(" | ") +
+         "  (default: " + harness.envInfo().defaultName + ")");
+  ui.log("  --dry-run         print what would be written without touching disk");
+  ui.log("");
+  ui.log(ui.c("bold", "Environment variables"));
+  ui.log("  NEOSMITH_ENV       same as --env; --env wins if both are set");
+  ui.log("  NEOSMITH_BASE_URL  point at an exact address (outranks --env; a warning is printed)");
+  ui.log("  NEOSMITH_MANIFEST  override the harnesses.json path (testing)");
   ui.log("");
   ui.log(ui.c("dim", "No NeoSmith account yet? Email contact-us@neosmith.ai for a trial key."));
   ui.log(ui.c("dim", "Full guide: https://github.com/Neosmith-ai/neosmith-connect/blob/main/packages/cli/README.md"));
