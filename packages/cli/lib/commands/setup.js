@@ -37,9 +37,19 @@ function harnessInstallPaths(manifestEntry) {
     paths.push(path.join(io.HOME, ".codex"));
   } else if (manifestEntry.id === "continue") {
     paths.push(path.join(io.HOME, ".continue"));
+  } else if (manifestEntry.id === "copilot") {
+    // Copilot Chat: VS Code's own User dir is the install signal. The manifest
+    // configFile is a vscode:// pseudo-path, so the generic probe above can't
+    // resolve it to anything real.
+    if (process.platform === "win32") paths.push(path.join(process.env.APPDATA || "", "Code", "User"));
+    else if (process.platform === "darwin") paths.push(path.join(io.HOME, "Library", "Application Support", "Code", "User"));
+    else paths.push(path.join(io.HOME, ".config", "Code", "User"));
   } else if (manifestEntry.id === "cline") {
-    // Cline: VS Code extension is the install signal. Heuristic: VS Code
-    // user/extensions dir present.
+    // Cline 4.x and the standalone CLI share this directory, so its presence is
+    // the primary install signal regardless of which one the user runs.
+    paths.push((process.env.CLINE_DIR || "").trim() || path.join(io.HOME, ".cline"));
+    // Cline 3.x had no ~/.cline — the VS Code extension's globalStorage dir is
+    // the only signal there, and `on` prints paste-in values for that case.
     if (process.platform === "win32") paths.push(path.join(process.env.APPDATA || "", "Code", "User", "globalStorage", "saoudrizwan.claude-dev"));
     else if (process.platform === "darwin") paths.push(path.join(io.HOME, "Library", "Application Support", "Code", "User", "globalStorage", "saoudrizwan.claude-dev"));
     else paths.push(path.join(io.HOME, ".config", "Code", "User", "globalStorage", "saoudrizwan.claude-dev"));

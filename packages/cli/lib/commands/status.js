@@ -9,15 +9,32 @@ const io = require("../io");
 const originals = require("../originals");
 const ui = require("../ui");
 
+// `<harness> status --confirmed` marks a manual, UI-only step as done — the
+// harness can't observe it from disk. Documented since 0.3.0 for Copilot Chat,
+// but nothing ever wrote the flag, so `status` could never reach its `on`
+// state. Setting it merges into the existing meta: overwriting would drop the
+// model/env `on` recorded.
+function markConfirmed(mod) {
+  const state = io.readState();
+  const meta = (state.harnesses && state.harnesses[mod.id]) || {};
+  io.setHarnessFlag(mod.id, true, { ...meta, confirmed: true });
+}
+
 async function run(args) {
-  const h = args[0];
+  const flags = args.filter((a) => a.startsWith("--"));
+  const positional = args.filter((a) => !a.startsWith("--"));
+  const h = positional[0];
   const active = harness.envInfo();
 
   if (h) {
     const mod = harness.get(h.toLowerCase());
     if (!mod) ui.die(`Unknown harness: ${h}. Supported: ${harness.ids().join(", ")}.`);
+    if (flags.includes("--confirmed")) markConfirmed(mod);
     printOne(mod, active);
     return;
+  }
+  if (flags.includes("--confirmed")) {
+    ui.die("`--confirmed` marks one harness's manual step as done — name it, e.g. `neosmith copilot status --confirmed`.");
   }
 
   ui.banner(`NeoSmith · status · env=${active.name} (${active.baseUrl})`);

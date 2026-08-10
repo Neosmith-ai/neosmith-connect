@@ -146,27 +146,85 @@ const WRITABLE = {
     },
   },
 
-  copilot: {
+  // Cline 4.x (VS Code/JetBrains) and the standalone CLI share ONE global
+  // providers.json, so the user's other providers — and which one is selected
+  // — are exactly what `on` must not trample.
+  cline: {
     seed: () => JSON.stringify({
-      vendors: [{ vendor: "customendpoint", displayName: "My Own", baseUrl: "https://example.com/v1", models: [] }],
+      version: 1,
+      lastUsedProvider: "anthropic",
+      providers: {
+        anthropic: { settings: { provider: "anthropic", model: "claude-sonnet-4-6" } },
+        "openai-compatible": {
+          settings: {
+            provider: "openai-compatible",
+            apiKey: "user-owned-key",
+            model: "gpt-5-user",
+            baseUrl: "https://example.com/v1",
+          },
+          tokenSource: "manual",
+        },
+      },
     }, null, 2) + "\n",
     userSurvives(t, text) {
       const c = JSON.parse(text);
-      assert.ok(c.vendors.some((v) => v.displayName === "My Own"), `${t}: user's own vendor must survive`);
+      assert.ok(c.providers.anthropic, `${t}: the user's other providers must survive`);
+      assert.equal(c.providers.anthropic.settings.model, "claude-sonnet-4-6",
+        `${t}: unrelated provider settings must survive`);
     },
     neoPresent(text) {
       const c = JSON.parse(text);
-      assert.ok(c.vendors.some((v) => v.displayName === "NeoSmith"));
+      const s = c.providers["openai-compatible"].settings;
+      assert.equal(s.baseUrl, "https://router.neosmith.ai/v1");
+      assert.equal(s.apiKey, KEY);
+      assert.equal(c.lastUsedProvider, "openai-compatible",
+        "a provider Cline never selects is wired on disk and dead in practice");
     },
     neoGone(text) {
       const c = JSON.parse(text);
-      assert.ok(!c.vendors.some((v) => v.displayName === "NeoSmith"), "NeoSmith vendor removed");
-      assert.equal(c.vendors.length, 1, "only the user's vendor remains");
+      const s = c.providers["openai-compatible"].settings;
+      assert.equal(s.baseUrl, "https://example.com/v1", "user's baseUrl restored, not deleted");
+      assert.equal(s.apiKey, "user-owned-key", "user's apiKey restored, not deleted");
+      assert.equal(c.lastUsedProvider, "anthropic", "user's active provider restored");
+    },
+  },
+
+  // chatLanguageModels.json is a top-level ARRAY of provider entries, keyed
+  // `name`, with the endpoint on each MODEL as `url`. Pinning the real shape
+  // here: the pre-0.9 module wrote {"vendors":[…]} with a provider-level
+  // baseUrl, which VS Code ignores outright.
+  copilot: {
+    seed: () => JSON.stringify([
+      {
+        name: "My Own",
+        vendor: "customendpoint",
+        apiType: "chat-completions",
+        models: [{ id: "gpt-5-user", name: "gpt-5-user", url: "https://example.com/v1" }],
+      },
+    ], null, 2) + "\n",
+    userSurvives(t, text) {
+      const c = JSON.parse(text);
+      assert.ok(Array.isArray(c), `${t}: the file root must stay an array`);
+      assert.ok(c.some((v) => v.name === "My Own"), `${t}: user's own provider must survive`);
+    },
+    neoPresent(text) {
+      const c = JSON.parse(text);
+      const neo = c.find((v) => v.name === "NeoSmith");
+      assert.ok(neo, "NeoSmith provider registered");
+      assert.equal(neo.vendor, "customendpoint");
+      assert.ok(!("baseUrl" in neo), "the endpoint belongs on the model, not the provider");
+      assert.equal(neo.models[0].url, "https://router.neosmith.ai/v1");
+      assert.ok(!("apiKey" in neo), "apiKey is minted by VS Code, never written by us");
+    },
+    neoGone(text) {
+      const c = JSON.parse(text);
+      assert.ok(!c.some((v) => v.name === "NeoSmith"), "NeoSmith provider removed");
+      assert.equal(c.length, 1, "only the user's provider remains");
     },
   },
 };
 
-const UI_DRIVEN = ["cline", "cursor", "jetbrains"];
+const UI_DRIVEN = ["cursor", "jetbrains"];
 
 // ── coverage gate ───────────────────────────────────────────────────────────
 test("issue #15: every registered harness is covered by this file", () => withSandbox(() => {

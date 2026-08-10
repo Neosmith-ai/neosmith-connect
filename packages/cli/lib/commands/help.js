@@ -5,12 +5,22 @@
 const harness = require("../harness");
 const ui = require("../ui");
 
+// Read once at help time, not at module load. The packaged CLI ships
+// node_modules with their own package.json — caching the version at require
+// time would lock it to whatever was at the install root before symlinks
+// resolved, which is the wrong copy on a npm-global install.
+function readVersion() {
+  try { return require("../../package.json").version; }
+  catch { return "unknown"; }
+}
+
 function envNames() {
   return Object.keys(harness.manifest().environments || {});
 }
 
 function top() {
   ui.banner("NeoSmith CLI");
+  ui.log(ui.c("dim", `  v${readVersion()}`));
   ui.log("  Route AI coding agents through " + ui.c("cyan", harness.ROUTER_URL) + ".");
   ui.log("  Same experience, ~60% lower inference cost.");
   ui.log("");

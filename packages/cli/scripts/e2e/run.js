@@ -24,9 +24,9 @@
 //
 //   prompt   claude, codex     — real binary, real prompt through the router
 //   config   continue, zed,    — assert what `on` wrote and that `off`
-//            copilot             restores byte-for-byte
-//   printed  cline, jetbrains, — assert the printed instructions are correct
-//            cursor              for THIS platform (writable:false)
+//            copilot, cline      restores byte-for-byte
+//   printed  jetbrains, cursor — assert the printed instructions are correct
+//                                for THIS platform (writable:false)
 
 "use strict";
 
@@ -227,7 +227,10 @@ const PATHS = {
   codex:    path.join(HOME, ".codex", "config.toml"),
   continue: path.join(HOME, ".continue", "config.yaml"),
   zed:      zedSettingsPath(),
-  copilot:  path.join(vsCodeUserDir(), "globalStorage", "github.copilot-chat", "chatLanguageModels.json"),
+  cline:    path.join(HOME, ".cline", "data", "settings", "providers.json"),
+  // chatLanguageModels.json is owned by VS Code itself and lives at the
+  // PROFILE ROOT — not in the extension's globalStorage.
+  copilot:  path.join(vsCodeUserDir(), "chatLanguageModels.json"),
   state:    path.join(HOME, ".neosmith", "state.json"),
   audit:    path.join(HOME, ".neosmith", "audit.log"),
 };
@@ -326,10 +329,14 @@ function configTier(id, seed) {
     wired ? "" : "config missing after on");
 
   if (id === "copilot") {
-    // The key cannot be pre-seeded into VS Code SecretStorage, so `on` writes
-    // a placeholder. A literal key on disk here would be a leak.
-    record("copilot: writes the input placeholder, never a literal key",
-      !!wired && wired.includes("${input:neosmithApiKey}") && (!KEY || !wired.includes(KEY)));
+    // The key cannot be pre-seeded into VS Code SecretStorage. VS Code mints
+    // its own `${input:chat.lm.secret.<hash>}` handle when the user enters the
+    // key, so `on` writes no apiKey at all — an invented handle would not
+    // resolve, and a literal key on disk would be a leak.
+    const entries = JSON.parse(wired || "[]");
+    const neo = Array.isArray(entries) ? entries.find((v) => v && v.name === "NeoSmith") : null;
+    record("copilot: writes no apiKey — VS Code mints the SecretStorage handle",
+      !!neo && !("apiKey" in neo) && (!KEY || !wired.includes(KEY)));
   }
 
   const off = cli([id, "off"]);
@@ -513,8 +520,25 @@ const ZED_SEED = JSON.stringify({
   },
 }, null, 2) + "\n";
 
-const COPILOT_SEED = JSON.stringify({
-  vendors: [{ vendor: "customendpoint", name: "My Own", baseUrl: "https://my-own.example/v1" }],
+// A top-level ARRAY of provider entries, with the endpoint as `url` on each
+// MODEL — the shape VS Code actually reads.
+const COPILOT_SEED = JSON.stringify([
+  {
+    name: "My Own",
+    vendor: "customendpoint",
+    apiType: "chat-completions",
+    models: [{ id: "gpt-5-user", name: "gpt-5-user", url: "https://my-own.example/v1" }],
+  },
+], null, 2) + "\n";
+
+// Cline's shared global config: a second provider plus a selection the connect
+// must switch and `off` must switch back.
+const CLINE_SEED = JSON.stringify({
+  version: 1,
+  lastUsedProvider: "ollama",
+  providers: {
+    ollama: { settings: { provider: "ollama", model: "llama3", baseUrl: "http://localhost:11434" } },
+  },
 }, null, 2) + "\n";
 
 if (!args.json) {
@@ -530,7 +554,7 @@ if (loggedIn) {
     case "continue": configTier("continue", CONTINUE_SEED); break;
     case "zed":      configTier("zed", ZED_SEED); break;
     case "copilot":  configTier("copilot", COPILOT_SEED); break;
-    case "cline":
+    case "cline":    configTier("cline", CLINE_SEED); break;
     case "jetbrains":
     case "cursor":   printedTier(args.harness); break;
     default:

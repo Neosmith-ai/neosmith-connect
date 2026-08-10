@@ -208,28 +208,24 @@ neosmith copilot status --confirmed     # flips state to "on"
 
 Then `neosmith doctor` (or `neosmith status`) will report `copilot: on`.
 
-### Cline (fully UI-driven)
+### Cline (editor extension + standalone CLI, one file)
 
 ```bash
 neosmith cline on
 ```
 
-`on` writes nothing — Cline stores provider config inside its extension, not in a file. It **prints** the exact values at the top of its output:
+Cline 4.x and the standalone `cline` CLI share one global config, so a single connect covers the VS Code extension, the JetBrains plugin, and the terminal:
 
 ```
-Open Cline's settings (gear icon in the Cline panel) and set:
-  API Provider:  OpenAI Compatible
-  Base URL:      https://router.neosmith.ai/v1
-  API Key:       sk-plus-yourname-xxxxxx
-  Model ID:      neosmith.intelligent-pro
-
-Enable streaming + tool/function calling (required for Cline's agentic actions).
-Save. Cline's plan/act/verify loops now run on NeoSmith.
+($CLINE_DIR || ~/.cline)/data/settings/providers.json   # provider, key, model, baseUrl
+($CLINE_DIR || ~/.cline)/data/settings/models.json      # context window + capabilities
 ```
 
-Open the Cline panel → click the **gear icon** → paste each value → save. Done.
+`on` writes both, registers the `openai-compatible` provider, and sets `lastUsedProvider` so the provider it wrote is the one Cline actually uses. Reload the Cline panel (or start a new `cline` session) and you're done. `neosmith cline off` restores the pre-connect files byte-for-byte, including which provider was selected.
 
-To disconnect later, run `neosmith cline off` then **switch Cline back** in the same settings UI (any provider that isn't NeoSmith, or remove the entry). NeoSmith also clears its local on-flag so `status` reports `off`.
+> **On Cline 3.x?** Provider config lived in VS Code's extension state back then, which no CLI can write. `on` prints the paste-in values for that case — open the Cline panel → gear icon → API Provider **OpenAI Compatible**, Base URL `https://router.neosmith.ai/v1`, your key, Model ID `neosmith.intelligent-pro`, streaming and tool calling on.
+
+See [Cline setup](agents/cline) for the by-hand routes (`cline auth …` and the gear-icon UI).
 
 ### JetBrains AI Assistant (fully UI-driven)
 
@@ -237,7 +233,7 @@ To disconnect later, run `neosmith cline off` then **switch Cline back** in the 
 neosmith jetbrains on
 ```
 
-Same pattern as Cline — nothing is written to a file. `on` prints the values plus a per-feature model map:
+Nothing is written to a file — JetBrains AI keeps its provider config in the IDE's own storage. `on` prints the values plus a per-feature model map:
 
 ```
 Settings → Tools → AI Assistant → Providers & API Keys
@@ -263,12 +259,12 @@ Then assign models per feature (Settings → Tools → AI Assistant → Models):
 | Codex | yes (`~/.codex/config.toml`, 0600) | run the `export` line in your shell | env var (`$OPENAI_API_KEY`) |
 | Continue | yes (`~/.continue/config.yaml`, 0600) | none | config file literal |
 | **Copilot Chat** | yes (`chatLanguageModels.json`) | **yes — paste into VS Code picker** | **OS-keychain (SecretStorage)** |
-| **Cline** | no | **yes — paste into Cline's settings UI** | Cline extension internal state |
+| Cline | yes (`~/.cline/data/settings/providers.json`, 0600) | none on 4.x — **paste into the settings UI on 3.x** | config file literal |
 | **JetBrains AI** | no | **yes — paste into IDE Settings** | IDE internal storage |
 | Zed | yes (`~/.config/zed/settings.json`, 0600) | none | config file literal |
 | Cursor | yes (`Cursor/User/settings.json`, 0600) | none | config file literal |
 
-The "Manual step?" column is the one that breaks first. Run `neosmith doctor` after the manual step — if a row says `models-written` (Copilot) or `UI-configured model=…` (Cline, JetBrains), you're fine; if it says anything else, the key didn't actually land in the tool's store.
+The "Manual step?" column is the one that breaks first. Run `neosmith doctor` after the manual step — if a row says `models-written` (Copilot) or `UI-configured model=…` (JetBrains), you're fine; if it says anything else, the key didn't actually land in the tool's store.
 
 ---
 
@@ -321,7 +317,7 @@ You can change tiers any time by re-running `on` with a new `--model`. The CLI u
 | 1 | **Claude Code** | `~/.claude/settings.json` (0600) | Yes — quit and reopen |
 | 2 | **Codex** | `~/.codex/config.toml` (0600) + `export OPENAI_API_KEY=…` for your shell | Yes — restart Codex |
 | 3 | **Continue** | `~/.continue/config.yaml` (0600) | Yes — reload VS Code window |
-| 4 | **Cline** | *(none — Cline stores in its own extension state)* | Yes — paste values into Cline's gear-icon UI |
+| 4 | **Cline** | `~/.cline/data/settings/providers.json` + `models.json` (0600) — shared by the extension and the standalone CLI | Yes — reload the Cline panel (on 3.x: paste into the gear-icon UI) |
 | 5 | **JetBrains AI** | *(none — JetBrains stores in IDE settings)* | Yes — paste into **Settings → Tools → AI Assistant → Providers & API Keys** |
 | 6 | **Copilot Chat** | VS Code `chatLanguageModels.json` (key in OS-keychain) | Yes — reload window |
 | 7 | **Zed** | `~/.config/zed/settings.json` (0600) | Yes — restart Zed |
@@ -355,9 +351,13 @@ You used a `gpt-*` id. **Don't.** Use `neosmith.intelligent-pro`. The router onl
 
 Your `apiBase` is probably missing `/v1`. The CLI adds it automatically; if you hand-edited `~/.continue/config.yaml`, check the `apiBase:` line ends exactly with `/v1`.
 
-### Cline / JetBrains: "`on` didn't change anything"
+### JetBrains: "`on` didn't change anything"
 
-These two harnesses are **UI-driven** — Cline and JetBrains store their provider config in their own internal state, and there's no public config file. `on` prints the exact values (URL, key, model) at the top of its output. **You have to paste them into the tool's settings UI.** Look for the values between the `──` banner and the `✓` line.
+JetBrains AI is **UI-driven** — it stores the provider in the IDE's own settings, and there's no public config file. `on` prints the exact values (URL, key, model) at the top of its output. **You have to paste them into Settings → Tools → AI Assistant.** Look for the values between the `──` banner and the `✓` line.
+
+### Cline: "`on` wrote the file but nothing changed"
+
+Two causes. On **Cline 3.x** the provider lives in VS Code's extension state, so the file isn't read — paste the values `on` printed into the gear-icon UI instead. On **4.x**, reload the Cline panel and run `neosmith cline status`: if it says *NOT the active provider*, something switched `lastUsedProvider` after the connect, so re-run `neosmith cline off && neosmith cline on` or pick NeoSmith in Cline's provider dropdown.
 
 ### macOS GUI app doesn't see the env vars
 

@@ -29,6 +29,13 @@
     "lite": "neosmith.neolite",
     "maestro": "neosmith.intelligent-maestro"
   },
+  "$modelSpecs": "Per-SKU capability metadata for harnesses that must be TOLD what a model can do. GET /v1/models returns ids only — no context window, no capabilities — so a custom-endpoint client (Cline's models.json, Zed's available_models) has no way to discover this. Without it those clients fall back to conservative defaults and compact context far too early. 512K for neolite is the documented sealed-budget ceiling; the 1M figures match what the harnesses have shipped since 0.2.0.",
+  "modelSpecs": {
+    "neosmith.intelligent-pro":     { "contextWindow": 1000000, "maxTokens": 128000 },
+    "neosmith.intelligent-basic":   { "contextWindow": 1000000, "maxTokens": 128000 },
+    "neosmith.neolite":             { "contextWindow": 512000,  "maxTokens": 128000 },
+    "neosmith.intelligent-maestro": { "contextWindow": 1000000, "maxTokens": 128000 }
+  },
   "claudeTierMap": {
     "opus":   { "slot": "OPUS",   "model": "neosmith.intelligent-pro",     "name": "NeoSmith Pro",     "description": "Cost-optimised with Opus escalation" },
     "sonnet": { "slot": "SONNET", "model": "neosmith.intelligent-basic",   "name": "NeoSmith Basic",   "description": "Cost-optimised with Sonnet ceiling" },
@@ -86,15 +93,17 @@
       "id": "cline",
       "name": "Cline",
       "module": "./lib/harnesses/cline.js",
-      "writable": false,
-      "configFile": null,
+      "writable": true,
+      "configFile": "~/.cline/data/settings/providers.json",
       "wire": "openai-completions",
       "defaultModel": "pro",
-      "keyMode": "ui-driven",
+      "keyMode": "literal-openai-key",
+      "idempotency": "snapshot-once",
       "registryOrder": 4,
       "addedIn": "0.2.0",
       "docPage": "agents/cline.md",
-      "shortLabel": "Cline"
+      "shortLabel": "Cline",
+      "notes": "Re-verified 2026-08-10 against saoudrizwan.claude-dev 4.1.7 and Cline CLI 3.0.52: Cline 4.x (VS Code/JetBrains) and the standalone CLI share one global config at ($CLINE_DIR||~/.cline)/data/settings/providers.json, with model metadata in a sibling models.json. CLINE_PROVIDER_SETTINGS_PATH relocates providers.json. Cline 3.x kept the provider in VS Code globalState, so `on` still prints paste-in values for that case."
     },
     {
       "id": "jetbrains",
@@ -121,7 +130,7 @@
       "name": "Copilot Chat",
       "module": "./lib/harnesses/copilot.js",
       "writable": true,
-      "configFile": "vscode://globalStorage/github.copilot-chat/chatLanguageModels.json",
+      "configFile": "vscode://User/chatLanguageModels.json",
       "wire": "openai-completions",
       "defaultModel": "pro",
       "keyMode": "ui-keychain",
