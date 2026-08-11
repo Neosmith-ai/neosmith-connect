@@ -26,3 +26,7 @@ Thumbs.db
 # against a real machine — never meant to be checked into the repo.
 .continue/
 .codex/
+
+# Personal scratch space — one-shot validation scripts and other tools that
+# lived alongside the repo for an investigation. Not part of the project.
+scripts/_one_shot/
