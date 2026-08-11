@@ -40,23 +40,20 @@ on:
         description: npm version of @openai/codex
         default: latest
         type: string
-  # Push-to-main trigger makes e2e-staging the standard post-merge gate —
-  # one run per merge, on the cheapest sealed SKU, with the spend cap
-  # already on the CI key as belt-and-braces. The preflight job still
-  # gates the work: if staging is down on a push, the matrix is skipped.
+  # Push-to-main trigger: one post-merge run, on the cheapest sealed SKU,
+  # with the spend cap on the CI key as belt-and-braces. The preflight
+  # job still gates the work: if staging is down on a push, the matrix
+  # is skipped.
   push:
     branches: [main]
-  # ENABLEMENT: this workflow ships without a schedule + PR trigger on
-  # purpose. It installs third-party binaries. After three consecutive
-  # green manual runs on BOTH macOS and Windows, uncomment:
-  #
-  # schedule:
-  #   - cron: "0 6 * * 1-5"
-  # pull_request:
-  #   types: [opened, synchronize, reopened, labeled]
-  #   # label-gated to e2e-staging and same-repo only — see the `if:` on
-  #   # the preflight job, so it never runs on a fork and only runs
-  #   # when someone has opted a PR in.
+  # Every-PR trigger: opens / synchronize / reopened. No label gate —
+  # the gate now lives in the preflight job, where the same-repo guard
+  # silently skips fork PRs (which never see secrets anyway, so they
+  # always fail at the `have_key` check; see the preflight `if:`).
+  # Stays dispatch-triggerable for manual rerun.
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
 
 # Never pull_request_target — that is the canonical way a staging key leaks
 # from a fork.
@@ -81,14 +78,31 @@ jobs:
     outputs:
       healthy: ${{ steps.check.outputs.healthy }}
       have_key: ${{ steps.check.outputs.have_key }}
-    # Fork PRs never see secrets, and an unlabeled PR should not spend money.
+    # Same-repo only. Fork PRs never receive secrets, so the no-key path
+    # below is what they hit; the matrix is not gated on a label any
+    # more — e2e-staging runs on every PR by design.
     if: >-
       github.event_name != 'pull_request' ||
-      (github.event.pull_request.head.repo.full_name == github.repository &&
-       contains(github.event.pull_request.labels.*.name, 'e2e-staging'))
+      github.event.pull_request.head.repo.full_name == github.repository
     steps:
+      # On a same-repo PR we either see the secret or the workflow is
+      # misconfigured at the repo level. Detect no-key first and emit
+      # have_key=false cleanly, so the rest of the job can decide what
+      # to do (the fork-PR skip step below). The real curl probes run
+      # only when we actually have a key.
+      - id: detect
+        if: github.event_name == 'pull_request'
+        env:
+          KEY: ${{ secrets.NEOSMITH_STAGING_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "have_key=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::PR run with no staging key — fork or secret not propagated."  >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - uses: actions/checkout@v4
       - id: check
+        if: github.event_name != 'pull_request' || steps.detect.outputs.have_key != 'false'
         env:
           KEY: ${{ secrets.NEOSMITH_STAGING_KEY }}
         run: |
@@ -116,7 +130,6 @@ jobs:
             echo "healthy=false" >> "$GITHUB_OUTPUT"
             echo "$BASE is unhealthy (ready=$READY whoami=$WHO)" >> "$GITHUB_STEP_SUMMARY"
           fi
-
       # Confirm the router agrees about which environment answered. A stale DNS
       # entry or a proxy returns a healthy 200 from the WRONG deployment, and
       # no amount of client-side hostname matching can detect that — which is
@@ -144,6 +157,12 @@ jobs:
         run: |
           echo "::error::${E2E_ENV} is unreachable on a scheduled run. This is a real alert."
           exit 1
+
+      - name: Fork PR or missing secret — skipping (PR run)
+        if: github.event_name == 'pull_request' && steps.check.outputs.have_key != 'true'
+        run: |
+          echo "::notice::No staging key made it to this PR — fork or secret not propagated. Skipping the e2e matrix without failing the PR."
+          exit 0
 
   # ── pack ───────────────────────────────────────────────────────────────────
   # Build the tarball ONCE and assert its contents before spending a cent on
