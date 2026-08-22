@@ -297,10 +297,38 @@ function help() {
   ].join("\n");
 }
 
+// Which key Continue is holding, for `neosmith keys`. Read from the NeoSmith
+// model entry specifically — a user's own models each carry their own apiKey,
+// and reporting the first one in the file would name someone else's credential.
+// Structural read when `yaml` is available, scoped text match when it is not
+// (the same fallback pair `on`/`off` already use).
+function keyRef() {
+  if (!io.fileExists(CONFIG)) return null;
+  const text = io.readText(CONFIG);
+  if (text === null) return null;
+
+  if (yaml) {
+    try {
+      const parsed = yaml.parse(text) || {};
+      const entry = (Array.isArray(parsed.models) ? parsed.models : [])
+        .find((m) => m && typeof m === "object" && m.name === "NeoSmith");
+      if (entry && typeof entry.apiKey === "string" && entry.apiKey) {
+        return { kind: "literal", value: entry.apiKey, file: CONFIG };
+      }
+      return null;
+    } catch { /* fall through to the text match */ }
+  }
+
+  // `- name: NeoSmith` is followed by provider/apiBase/model/apiKey — bound the
+  // window so this cannot reach into the NEXT model entry's key.
+  const m = text.match(/name:\s*NeoSmith\s*\n[\s\S]{0,400}?apiKey:\s*(\S+)/);
+  return m ? { kind: "literal", value: m[1], file: CONFIG } : null;
+}
+
 module.exports = {
   id: "continue",
   name: "Continue",
   writable: true,
   configFile: CONFIG,
-  on, off, status, help,
+  on, off, status, help, keyRef,
 };

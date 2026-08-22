@@ -15,7 +15,9 @@ async function run(args) {
   await key.login(explicit, { envName: active.keyEnv });
   ui.log("");
   ui.log(ui.c("bold", "Next:") + " connect a harness — e.g. " + ui.c("cyan", "neosmith claude on"));
-  ui.log(ui.c("dim", "Supported: claude, codex, continue, cline, jetbrains. Run `neosmith help` for all."));
+  // Read from the registry, not a literal: this line claimed five harnesses
+  // long after the manifest had eleven.
+  ui.log(ui.c("dim", `Supported: ${harness.idsSorted().join(", ")}. Run \`neosmith help\` for all.`));
 }
 
 module.exports = { run };

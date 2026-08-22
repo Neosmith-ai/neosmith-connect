@@ -265,10 +265,22 @@ function help() {
   ].join("\n");
 }
 
+// Which key Zed is holding, for `neosmith keys`. Only report it when the block
+// actually points at NeoSmith — an api_key sitting under a user's own OpenAI
+// wiring is theirs, not ours to surface.
+function keyRef() {
+  if (!io.fileExists(CONFIG)) return null;
+  const cfg = io.readJSON(CONFIG) || {};
+  if (!hasNeoSmith(cfg)) return null;
+  const value = cfg.language_models.openai.api_key;
+  if (typeof value !== "string" || !value) return null;
+  return { kind: "literal", value, file: CONFIG };
+}
+
 module.exports = {
   id: "zed",
   name: "Zed",
   writable: true,
   configFile: CONFIG,
-  on, off, status, help,
+  on, off, status, help, keyRef,
 };

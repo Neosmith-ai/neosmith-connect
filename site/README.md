@@ -85,6 +85,9 @@ That's it. Open a new Claude Code session — your next prompt routes through Ne
 | **Copilot Chat** | [agents/copilot.md](agents/copilot.md) | OpenAI | `router.neosmith.ai/v1` |
 | **Zed** | [agents/zed.md](agents/zed.md) | OpenAI | `router.neosmith.ai/v1` |
 | **Cursor** | [ides/cursor.md](ides/cursor.md) | OpenAI | `router.neosmith.ai/v1` |
+| **OpenCode** | [agents/opencode.md](agents/opencode.md) | OpenAI | `router.neosmith.ai/v1` |
+| **OpenClaw** | [agents/openclaw.md](agents/openclaw.md) | OpenAI | `router.neosmith.ai/v1` |
+| **Junie CLI** | [agents/junie-cli.md](agents/junie-cli.md) | OpenAI | `router.neosmith.ai/v1` |
 <!-- END manifest:agents -->
 
 ### Platform Setup (Operating System)

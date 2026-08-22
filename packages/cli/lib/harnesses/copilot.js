@@ -468,6 +468,27 @@ function help() {
   ].join("\n");
 }
 
+// For `neosmith keys`. The key itself lives in VS Code's OS-keychain-backed
+// SecretStorage and is unreadable from here by design — all we can see is the
+// ${input:chat.lm.secret.…} handle VS Code stamps onto our entry once the user
+// has entered one. Reporting that as "in the keychain" is honest; reporting
+// null would read as "no key", which is a different and wrong statement.
+function keyRef() {
+  for (const t of profileTargets()) {
+    const { list } = readProviders(t.file);
+    const neo = list.find(isNeosmithProvider);
+    if (!neo) continue;
+    return {
+      kind: "keychain",
+      detail: hasKeyHandle(neo)
+        ? "VS Code SecretStorage (a key has been entered)"
+        : "VS Code SecretStorage (no key entered yet)",
+      file: t.file,
+    };
+  }
+  return null;
+}
+
 module.exports = {
   id: "copilot",
   name: "Copilot Chat",
@@ -477,5 +498,5 @@ module.exports = {
   configFile: CONFIG,
   legacyConfigFile: LEGACY_CONFIG,
   profileTargets,
-  on, off, status, help,
+  on, off, status, help, keyRef,
 };
