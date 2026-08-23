@@ -55,24 +55,45 @@ customer path — including the [`files`](packages/cli/package.json) allowlist,
 which is the single most common source of "worked locally, broken on npm" bugs
 (a `lib/` module that never shipped, a missing `harnesses.json`).
 
+`npm pack` prints the tarball name on **stdout** and its notices on stderr, so
+capture it rather than typing a version that goes stale the next time you bump.
+
+**Git Bash / macOS / Linux:**
+
 ```bash
 cd packages/cli
+DEST="${TEMP:-/tmp}"
 
 # 1. Build the tarball. Write it OUTSIDE the repo — *.tgz is not gitignored.
-npm pack --pack-destination "$TEMP"        # Git Bash / PowerShell on Windows
-npm pack --pack-destination /tmp           # macOS / Linux
+TGZ=$(npm pack --pack-destination "$DEST")
 
 # 2. Install it globally, exactly as a customer would receive it
-npm install -g "$TEMP/neosmithai-cli-0.8.0.tgz"
+npm install -g "$DEST/$TGZ"
 
 # 3. Confirm you're running the installed copy, not your working tree
 which neosmith        # should be your npm global bin, NOT ~/.local/bin
 neosmith --version
 ```
 
+**PowerShell:**
+
+```powershell
+Set-Location packages\cli
+$tgz = npm pack --pack-destination $env:TEMP
+npm install -g (Join-Path $env:TEMP $tgz)
+
+(Get-Command neosmith).Source
+neosmith --version
+```
+
 > **Windows note:** `$TEMP` is the Git Bash form. In PowerShell it's
 > `$env:TEMP`; in cmd, `%TEMP%`. Mixing them produces a confusing
 > `ENOENT ... \:TEMP\...` path error.
+
+> A global install **replaces** whatever `@neosmithai/cli` is already there,
+> including the published release. `npm ls -g --depth=0` tells you what you
+> have before you overwrite it; `npm install -g @neosmithai/cli` puts the
+> registry version back afterwards.
 
 Then actually drive it — real config, real router, real editors:
 
@@ -101,7 +122,7 @@ Read the file list. If a module you added isn't there, it's missing from
 To avoid touching your everyday global npm:
 
 ```bash
-npm install -g --prefix /tmp/npm-sandbox "$TEMP/neosmithai-cli-0.8.0.tgz"
+npm install -g --prefix /tmp/npm-sandbox "$DEST/$TGZ"
 /tmp/npm-sandbox/bin/neosmith --version      # macOS / Linux
 /tmp/npm-sandbox/neosmith.cmd --version      # Windows
 ```
