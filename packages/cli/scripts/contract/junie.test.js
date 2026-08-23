@@ -253,7 +253,16 @@ test("junie status reports whether JUNIE_MODEL actually selects the profile", ()
       "there is no persistent default for a custom profile — saying nothing would imply there is");
 
     process.env.JUNIE_MODEL = "custom:neosmith";
-    assert.match(junie.status({}).detail, /JUNIE_MODEL selects it/);
+    assert.match(junie.status({}).detail, /JUNIE_MODEL=custom:neosmith/,
+      "naming the selected profile beats a bare 'yes' — with five of them, which one matters");
+
+    // A tier profile is just as valid a selection as the alias.
+    process.env.JUNIE_MODEL = "custom:neosmith-lite";
+    assert.match(junie.status({}).detail, /JUNIE_MODEL=custom:neosmith-lite/);
+
+    // Something that is not one of ours must not be reported as our selection.
+    process.env.JUNIE_MODEL = "custom:someone-elses-profile";
+    assert.match(junie.status({}).detail, /select with `junie --model custom:neosmith`/);
   } finally {
     if (saved === undefined) delete process.env.JUNIE_MODEL;
     else process.env.JUNIE_MODEL = saved;
@@ -267,4 +276,125 @@ test("junie on does NOT claim the harness is credential-less", () => withSandbox
     "needsEnv makes on.js print 'has no credentials until that variable is set' — true for " +
     "codex's env_key indirection, false here: the key is written into the profile. JUNIE_MODEL " +
     "selects a model, it does not supply a credential.");
+})));
+
+// ── all four SKUs, one profile file each ────────────────────────────────────
+// One Junie profile holds ONE model — there is no catalogue field the way
+// opencode/openclaw have. Offering every tier therefore means writing a file
+// per tier, and `off` has to take all of them back.
+
+test("junie on writes one profile per SKU, plus the wired-tier alias", () => withSandbox(() => withoutJunieHome(() => {
+  const { harness, junie } = loadJunie();
+  const res = junie.on({ key: KEY, model: harness.resolveModel("pro") });
+
+  const models = harness.manifest().models;
+  const tiers = Object.keys(models);
+  assert.equal(res.profiles, tiers.length + 1,
+    `${tiers.length} tier profiles plus the custom:${junie.profile} alias`);
+
+  for (const [tier, sku] of Object.entries(models)) {
+    const file = junie.profilePath(`${junie.profile}-${tier}`);
+    assert.ok(fs.existsSync(file), `custom:${junie.profile}-${tier} must exist`);
+    const p = read(file);
+    assert.equal(p.id, sku, `${tier}: the profile's model`);
+    assert.equal(p.apiKey, KEY, `${tier}: every profile carries the key`);
+    assert.equal(p.apiType, "OpenAICompletion", `${tier}: wire format`);
+    assert.equal(p.baseUrl, "https://router.neosmith.ai/v1/chat/completions", `${tier}: full endpoint`);
+  }
+})));
+
+test("junie: each profile declares its own real context window", () => withSandbox(() => withoutJunieHome(() => {
+  const { harness, junie } = loadJunie();
+  junie.on({ key: KEY, model: harness.resolveModel("pro") });
+
+  const specs = harness.manifest().modelSpecs;
+  for (const [tier, sku] of Object.entries(harness.manifest().models)) {
+    const p = read(junie.profilePath(`${junie.profile}-${tier}`));
+    assert.equal(p.maxContextLength, specs[sku].contextWindow,
+      `${tier}: Junie cannot discover a context window — an unset one compacts far too early`);
+  }
+  assert.equal(read(junie.profilePath(`${junie.profile}-lite`)).maxContextLength, 512000,
+    "neolite is the sealed 512K budget tier, not 1M");
+})));
+
+test("junie: the lite profile has no fasterModel pointing at itself", () => withSandbox(() => withoutJunieHome(() => {
+  const { harness, junie } = loadJunie();
+  junie.on({ key: KEY, model: harness.resolveModel("pro") });
+
+  assert.deepEqual(read(junie.profilePath(`${junie.profile}-pro`)).fasterModel, { id: "neosmith.neolite" });
+  assert.ok(!("fasterModel" in read(junie.profilePath(`${junie.profile}-lite`))),
+    "Junie falls back to the primary when fasterModel is absent — self-reference is noise");
+})));
+
+test("junie: the alias tracks --model, the tier profiles do not", () => withSandbox(() => withoutJunieHome(() => {
+  const { junie } = loadJunie();
+  junie.on({ key: KEY, model: "neosmith.intelligent-basic" });
+
+  assert.equal(read(junie.configPath()).id, "neosmith.intelligent-basic",
+    "custom:neosmith means 'the tier I connected with'");
+  assert.equal(read(junie.profilePath(`${junie.profile}-pro`)).id, "neosmith.intelligent-pro",
+    "custom:neosmith-pro always means pro, whatever was wired");
+})));
+
+test("junie: the tier list comes from the manifest, so a new SKU lands for free", () => withSandbox(() => withoutJunieHome(() => {
+  const { harness, junie } = loadJunie();
+  const declared = junie.tierProfiles().map((t) => t.sku).sort();
+  assert.deepEqual(declared, Object.values(harness.manifest().models).sort(),
+    "hardcoding the four tiers here is how this file goes stale the day a fifth ships");
+})));
+
+test("junie off removes every profile it wrote, and only those", () => withSandbox(() => withoutJunieHome(() => {
+  const { harness, junie } = loadJunie();
+  // A profile of the user's, sitting in the same directory.
+  const dir = path.dirname(junie.configPath());
+  fs.mkdirSync(dir, { recursive: true });
+  const mine = path.join(dir, "ollama.json");
+  fs.writeFileSync(mine, '{"id":"qwen3-coder:latest"}\n');
+
+  junie.on({ key: KEY, model: harness.resolveModel("pro") });
+  junie.off({});
+
+  assert.deepEqual(fs.readdirSync(dir), ["ollama.json"],
+    "every NeoSmith profile is gone and the user's is untouched");
+})));
+
+test("junie off puts back a tier profile the user already owned", () => withSandbox(() => withoutJunieHome(() => {
+  const { harness, junie } = loadJunie();
+  // Someone who already had a profile at the name we want. `on` must merge into
+  // it and `off` must hand it back, not delete a file that predates us.
+  const file = junie.profilePath(`${junie.profile}-lite`);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const original = JSON.stringify({ id: "my-own-model", temperature: 0.1 }, null, 2) + "\n";
+  fs.writeFileSync(file, original);
+
+  junie.on({ key: KEY, model: harness.resolveModel("pro") });
+  assert.equal(read(file).id, "neosmith.neolite", "on() re-points it");
+  assert.equal(read(file).temperature, 0.1, "and keeps what it does not own");
+
+  junie.off({});
+  assert.equal(fs.readFileSync(file, "utf8"), original,
+    "a profile that existed pre-connect comes back byte-for-byte, not deleted");
+})));
+
+test("junie status counts the tier profiles", () => withSandbox(() => withoutJunieHome(() => {
+  const { harness, junie } = loadJunie();
+  junie.on({ key: KEY, model: harness.resolveModel("pro") });
+  const n = Object.keys(harness.manifest().models).length;
+  assert.ok(junie.status({}).detail.includes(`${n} tier profile(s)`),
+    `status must say how many tiers are installed; got: ${junie.status({}).detail}`);
+})));
+
+test("junie: `on` prints a selection line for every profile it wrote", () => withSandbox(() => withoutJunieHome(() => {
+  const { harness, junie } = loadJunie();
+  const out = [];
+  const origLog = console.log;
+  console.log = (...a) => out.push(a.join(" "));
+  try { junie.on({ key: KEY, model: harness.resolveModel("pro") }); }
+  finally { console.log = origLog; }
+
+  const text = out.join("\n");
+  for (const t of junie.tierProfiles()) {
+    assert.ok(text.includes(`custom:${t.id}`),
+      `a profile the user is never told about is one they will never select (${t.id})`);
+  }
 })));

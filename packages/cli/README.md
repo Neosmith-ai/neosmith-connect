@@ -145,7 +145,7 @@ Every command supports `--help`. Run `neosmith help` or `neosmith <harness> help
 | **Cursor** | `neosmith cursor` | *(none — native BYOK is UI-only, needs Cursor Pro/Ultra)* | Cursor's encrypted, server-synced BYOK store (not `settings.json`) | Enter in Cursor → Settings → Models; or use `neosmith claude on` + the Claude Code extension |
 | **OpenCode** | `neosmith opencode` | `~/.config/opencode/opencode.json` (0600) — `provider.neosmith` plus `model`/`small_model` | `apiKey` literal (0600) | Restart OpenCode |
 | **OpenClaw** | `neosmith openclaw` | `~/.openclaw/openclaw.json` (0600) — `models.providers.neosmith` plus `agents.defaults.model.primary` | `apiKey` literal (0600) | Restart the gateway |
-| **Junie CLI** | `neosmith junie` | `~/.junie/models/neosmith.json` (0600) — one custom model profile | `apiKey` literal (0600) | Select it: `junie --model custom:neosmith` |
+| **Junie CLI** | `neosmith junie` | `~/.junie/models/neosmith*.json` (0600) — five custom model profiles: one per SKU plus a wired-tier alias | `apiKey` literal (0600) | Select one: `junie --model custom:neosmith` |
 
 Every harness supports `on`, `off`, `status`, and `help`. `off` restores your pre-connect configuration — file-based harnesses from a snapshot under `~/.neosmith/snapshots/`, and the UI-driven ones by clearing the on-flag and telling you what to switch back in the IDE.
 
@@ -386,27 +386,42 @@ OpenClaw refuses to start on a config that does not match its schema — unknown
 
 ### Junie CLI
 
-`~/.junie/models/neosmith.json` (or `$JUNIE_HOME/models/` if you have set it) — one file per custom model profile, where the filename stem *is* the profile id:
+`~/.junie/models/` (or `$JUNIE_HOME/models/` if you have set it) — one file per custom model profile, where the filename stem *is* the profile id.
+
+A Junie profile holds **one** model. There is no catalogue field the way OpenCode and OpenClaw have, so registering every NeoSmith tier means writing a file per tier. `neosmith junie on` writes five:
+
+| Profile | Model |
+|---|---|
+| `custom:neosmith` | the tier you connected with (the alias) |
+| `custom:neosmith-pro` | `neosmith.intelligent-pro` |
+| `custom:neosmith-basic` | `neosmith.intelligent-basic` |
+| `custom:neosmith-lite` | `neosmith.neolite` |
+| `custom:neosmith-maestro` | `neosmith.intelligent-maestro` |
+
+The alias means `--model custom:neosmith` keeps working whichever tier you wired; the four tier profiles let you switch inside Junie without re-running `on`. The list is generated from the manifest, so a new SKU shows up here automatically.
+
+Each file looks like this (`neosmith-lite.json`):
 
 ```json
 {
-  "id": "neosmith.intelligent-pro",
-  "displayName": "NeoSmith Pro",
+  "id": "neosmith.neolite",
+  "displayName": "NeoSmith NeoLite",
   "providerName": "NeoSmith",
   "baseUrl": "https://router.neosmith.ai/v1/chat/completions",
   "apiType": "OpenAICompletion",
   "apiKey": "sk-plus-yourname-xxxxxx",
-  "maxContextLength": 1000000,
-  "fasterModel": { "id": "neosmith.neolite" }
+  "maxContextLength": 512000
 }
 ```
+
+`maxContextLength` is per profile and is the real window — 512K for NeoLite, 1M for the rest. The pro/basic/maestro profiles also carry `"fasterModel": { "id": "neosmith.neolite" }` for helper tasks; the lite profile does not, because a `fasterModel` pointing at its own primary is noise.
 
 Two things are unlike every other harness here:
 
 - **`baseUrl` is the full endpoint, not the `/v1` root.** That is Junie's contract — JetBrains' own example for a local model is `http://localhost:11434/v1/chat/completions`.
 - **There is no persistent default for a custom profile.** Select it per run with `junie --model custom:neosmith`, or set `JUNIE_MODEL=custom:neosmith` — `on` prints the platform-correct way to do that (`setx` on Windows, an `export` in your rc file on POSIX).
 
-`on` merges rather than replaces, so a `temperature` or `extraHeaders` you added to this profile survives a re-run; `off` takes back only the fields NeoSmith wrote, and removes the file outright if nothing of yours is left on it.
+`on` merges rather than replaces, so a `temperature` or `extraHeaders` you added to any of these profiles survives; `off` takes back only the fields NeoSmith wrote, removes each file outright if nothing of yours is left on it, and leaves every other profile in the directory alone. A profile that already existed at one of those names before you connected is restored byte-for-byte rather than deleted.
 
 ---
 
