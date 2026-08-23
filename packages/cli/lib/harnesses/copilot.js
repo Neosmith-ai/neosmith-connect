@@ -161,23 +161,46 @@ function hasKeyHandle(p) {
   return !!(p && typeof p.apiKey === "string" && VSCODE_SECRET_HANDLE.test(p.apiKey));
 }
 
+function displayNameFor(sku) {
+  const tiers = harness.manifest().claudeTierMap || {};
+  for (const t of Object.values(tiers)) {
+    if (t && t.model === sku && t.name) return t.name;
+  }
+  return `NeoSmith ${sku}`;
+}
+
+// One model entry per SKU.
+//
+// Two things were wrong with registering only the wired one. The picker showed
+// a single NeoSmith model, so switching tiers meant re-running `on` — and
+// maxInputTokens/maxOutputTokens were hardcoded at 1000000/128000, which is
+// simply false for neolite's sealed 512K window. Both now come from the
+// manifest's modelSpecs, the same source cline.js's catalog uses.
+function buildModels(wired, url) {
+  const specs = harness.manifest().modelSpecs || {};
+  const entry = (sku, spec) => ({
+    id: sku,
+    name: displayNameFor(sku),
+    // Per-model, not provider-level — this is what VS Code reads.
+    url,
+    toolCalling: true,
+    vision: true,
+    maxInputTokens: spec.contextWindow,
+    maxOutputTokens: spec.maxTokens,
+  });
+  const models = Object.entries(specs).map(([sku, spec]) => entry(sku, spec));
+  if (!models.some((m) => m.id === wired)) {
+    models.push(entry(wired, specs[harness.MODELS.pro] || { contextWindow: 1000000, maxTokens: 128000 }));
+  }
+  return models;
+}
+
 function buildEntry(model, url) {
   return {
     name: DISPLAY_NAME,
     vendor: VENDOR,
     apiType: "chat-completions",
-    models: [
-      {
-        id: model,
-        name: model,
-        // Per-model, not provider-level — this is what VS Code reads.
-        url,
-        toolCalling: true,
-        vision: true,
-        maxInputTokens: 1000000,
-        maxOutputTokens: 128000,
-      },
-    ],
+    models: buildModels(model, url),
   };
 }
 

@@ -31,14 +31,52 @@ const CONFIG = path.join(CONFIG_DIR, "config.yaml");
 let yaml;
 try { yaml = require("yaml"); } catch { yaml = null; }
 
-function neosmithModelBlock(model, key) {
-  return {
-    name: "NeoSmith",
+// Every NeoSmith entry's `name` starts with this, which is what `off` keys on
+// to tell our models apart from the user's. The bare "NeoSmith" name is the
+// wired-tier entry and predates the per-SKU list; it is still written (and
+// still recognised) so an existing connect keeps the name it had.
+const NEO_NAME = "NeoSmith";
+
+function isNeosmithEntry(m) {
+  return !!(m && typeof m.name === "string" && (m.name === NEO_NAME || m.name.startsWith(NEO_NAME + " ")));
+}
+
+function displayNameFor(sku) {
+  const tiers = harness.manifest().claudeTierMap || {};
+  for (const t of Object.values(tiers)) {
+    if (t && t.model === sku && t.name) return t.name;
+  }
+  return `${NEO_NAME} ${sku}`;
+}
+
+function modelEntry(name, sku, key) {
+  const spec = (harness.manifest().modelSpecs || {})[sku];
+  const entry = {
+    name,
     provider: "openai",
     apiBase: harness.OPENAI_BASE_URL,
-    model,
+    model: sku,
     apiKey: key,
   };
+  // Continue cannot discover a context window — GET /v1/models returns ids
+  // only — so without contextLength it falls back to a conservative default
+  // and compacts a 1M-context SKU far too early. neolite is the sealed 512K
+  // tier; the rest are 1M.
+  if (spec) entry.defaultCompletionOptions = { contextLength: spec.contextWindow, maxTokens: spec.maxTokens };
+  return entry;
+}
+
+// The wired tier, under the bare "NeoSmith" name.
+function neosmithModelBlock(model, key) {
+  return modelEntry(NEO_NAME, model, key);
+}
+
+// One entry per SKU, so every tier is selectable from Continue's model
+// dropdown without re-running `on`. Sourced from the manifest, so a new SKU
+// lands here for free.
+function neosmithTierBlocks(key) {
+  return Object.values(harness.manifest().models || {})
+    .map((sku) => modelEntry(displayNameFor(sku), sku, key));
 }
 
 function neosmithAutocompleteBlock(key) {
@@ -67,11 +105,20 @@ function stringMerge(existingText, model, key, withAutocomplete) {
   lines.push(`schema: v1`);
   lines.push(``);
   lines.push(`models:`);
-  lines.push(`  - name: NeoSmith`);
-  lines.push(`    provider: openai`);
-  lines.push(`    apiBase: ${harness.OPENAI_BASE_URL}`);
-  lines.push(`    model: ${model}`);
-  lines.push(`    apiKey: ${key}`);
+  // The wired tier, then one entry per SKU — the same set the structural merge
+  // writes. A machine without the `yaml` dep must not silently get one model.
+  for (const m of [neosmithModelBlock(model, key), ...neosmithTierBlocks(key)]) {
+    lines.push(`  - name: ${m.name}`);
+    lines.push(`    provider: ${m.provider}`);
+    lines.push(`    apiBase: ${m.apiBase}`);
+    lines.push(`    model: ${m.model}`);
+    lines.push(`    apiKey: ${m.apiKey}`);
+    if (m.defaultCompletionOptions) {
+      lines.push(`    defaultCompletionOptions:`);
+      lines.push(`      contextLength: ${m.defaultCompletionOptions.contextLength}`);
+      lines.push(`      maxTokens: ${m.defaultCompletionOptions.maxTokens}`);
+    }
+  }
   if (withAutocomplete) {
     lines.push(``);
     lines.push(`tabAutocompleteModel:`);
@@ -117,9 +164,9 @@ function on(ctx) {
     io.recordRestore("continue", CONFIG, io.planRestore(parsed, WRITTEN_POINTERS));
 
     const models = Array.isArray(parsed.models) ? parsed.models.slice() : [];
-    // Replace any prior NeoSmith entry; keep others.
-    const filtered = models.filter((m) => !(m && m.name === "NeoSmith"));
-    filtered.push(neosmithModelBlock(model, key));
+    // Replace any prior NeoSmith entries; keep others.
+    const filtered = models.filter((m) => !isNeosmithEntry(m));
+    filtered.push(neosmithModelBlock(model, key), ...neosmithTierBlocks(key));
     parsed.models = filtered;
 
     if (withAutocomplete) parsed.tabAutocompleteModel = neosmithAutocompleteBlock(key);
@@ -188,7 +235,7 @@ function off(ctx) {
       // the .bak). Today's partial-restore: filter NeoSmith entries by name.
       // A user model NeoSmith overwrote can't be recovered.
       if (Array.isArray(parsed.models)) {
-        const kept = parsed.models.filter((m) => !(m && m.name === "NeoSmith"));
+        const kept = parsed.models.filter((m) => !isNeosmithEntry(m));
         if (kept.length) parsed.models = kept;
         else delete parsed.models;
       }
@@ -256,7 +303,7 @@ function unmergeByName(parsed, ledger) {
     const live = parsed.models;
     const out = [];
     for (const m of live) {
-      if (!m || typeof m !== "object" || m.name !== "NeoSmith") { out.push(m); continue; }
+      if (!isNeosmithEntry(m)) { out.push(m); continue; }
       if (prior.has(m.name)) out.push(JSON.parse(JSON.stringify(prior.get(m.name))));
       // An entry NeoSmith introduced that no prior exists for falls away.
     }
@@ -274,11 +321,15 @@ function status(ctx) {
   // The YAML is merged as text, so read the apiBase back out to name the env.
   const baseMatch = text.match(/apiBase:\s*(\S+)/);
   const wiredEnv = baseMatch ? harness.envForUrl(baseMatch[1]) : null;
+  // Distinct SKUs, not entry count: the wired-tier entry duplicates one of the
+  // per-SKU ones, and reporting "5 models" for four tiers reads as a bug.
+  const skus = new Set((text.match(/model:\s*(neosmith\.\S+)/g) || [])
+    .map((m) => m.replace(/^model:\s*/, "")));
   return {
     on: hasNeo,
     env: wiredEnv,
     detail: hasNeo
-      ? `model=${modelMatch ? modelMatch[1] : "(unset)"}${hasAutocomplete ? " +autocomplete" : ""} base=${baseMatch ? baseMatch[1] : "(unset)"}`
+      ? `model=${modelMatch ? modelMatch[1] : "(unset)"} · ${skus.size} SKU(s)${hasAutocomplete ? " +autocomplete" : ""} base=${baseMatch ? baseMatch[1] : "(unset)"}`
       : "no NeoSmith model entry",
   };
 }
@@ -310,8 +361,10 @@ function keyRef() {
   if (yaml) {
     try {
       const parsed = yaml.parse(text) || {};
-      const entry = (Array.isArray(parsed.models) ? parsed.models : [])
-        .find((m) => m && typeof m === "object" && m.name === "NeoSmith");
+      const ours = (Array.isArray(parsed.models) ? parsed.models : []).filter(isNeosmithEntry);
+      // The bare "NeoSmith" entry is the wired tier; the per-SKU ones all carry
+      // the same key, so either answers "which key is Continue holding".
+      const entry = ours.find((m) => m.name === NEO_NAME) || ours[0];
       if (entry && typeof entry.apiKey === "string" && entry.apiKey) {
         return { kind: "literal", value: entry.apiKey, file: CONFIG };
       }
@@ -331,4 +384,9 @@ module.exports = {
   writable: true,
   configFile: CONFIG,
   on, off, status, help, keyRef,
+  // Exported for the contract suite. stringMerge is the path taken when the
+  // optional `yaml` dep is missing, so it never runs in a normal install and
+  // nothing would otherwise notice it drifting from the structural merge — it
+  // used to emit one hardcoded model block while `on` wrote the full set.
+  stringMerge,
 };

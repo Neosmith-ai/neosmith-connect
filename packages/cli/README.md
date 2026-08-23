@@ -137,11 +137,11 @@ Every command supports `--help`. Run `neosmith help` or `neosmith <harness> help
 |---|---|---|---|---|
 | **Claude Code** | `neosmith claude` | `~/.claude/settings.json` (0600) + VS Code/Cursor `claudeCode.*` if the extension is installed | `ANTHROPIC_AUTH_TOKEN` literal (0600) | Restart after |
 | **Codex** | `neosmith codex` | `~/.codex/config.toml` (0600) | `$OPENAI_API_KEY` (env-key ref) | Restart after; export the printed line |
-| **Continue** | `neosmith continue` | `~/.continue/config.yaml` (0600) | `apiKey` literal (0600) | Reload VS Code window |
+| **Continue** | `neosmith continue` | `~/.continue/config.yaml` (0600) — one model entry per SKU | `apiKey` literal (0600) | Reload VS Code window |
 | **Cline** | `neosmith cline` | `~/.cline/data/settings/providers.json` + `models.json` (0600) — read by Cline 4.x in VS Code/JetBrains **and** the standalone Cline CLI | `apiKey` literal (0600) | Reload the Cline panel |
 | **JetBrains AI** | `neosmith jetbrains` | *(none — UI-driven)* | JetBrains IDE storage | Paste into Settings UI |
-| **Copilot Chat** | `neosmith copilot` | VS Code `chatLanguageModels.json` (key in OS-keychain) | OS-keychain (SecretStorage) | Reload window; paste key in picker once |
-| **Zed** | `neosmith zed` | `~/.config/zed/settings.json` (0600) | literal (0600) | Restart Zed |
+| **Copilot Chat** | `neosmith copilot` | VS Code `chatLanguageModels.json` — one model entry per SKU (key in OS-keychain) | OS-keychain (SecretStorage) | Reload window; paste key in picker once |
+| **Zed** | `neosmith zed` | `~/.config/zed/settings.json` (0600) — one `available_models` entry per SKU | literal (0600) | Restart Zed |
 | **Cursor** | `neosmith cursor` | *(none — native BYOK is UI-only, needs Cursor Pro/Ultra)* | Cursor's encrypted, server-synced BYOK store (not `settings.json`) | Enter in Cursor → Settings → Models; or use `neosmith claude on` + the Claude Code extension |
 | **OpenCode** | `neosmith opencode` | `~/.config/opencode/opencode.json` (0600) — `provider.neosmith` plus `model`/`small_model` | `apiKey` literal (0600) | Restart OpenCode |
 | **OpenClaw** | `neosmith openclaw` | `~/.openclaw/openclaw.json` (0600) — `models.providers.neosmith` plus `agents.defaults.model.primary` | `apiKey` literal (0600) | Restart the gateway |
@@ -220,6 +220,31 @@ So: restart VS Code → Copilot Chat → model picker → **Manage Language Mode
 **JetBrains AI Assistant** (fully UI-driven): `on` prints the values to paste into **Settings → Tools → AI Assistant → Providers & API Keys** (OpenAI-compatible, URL `https://router.neosmith.ai/v1`, tool calling enabled), plus the recommended per-feature model assignments (Chat → pro, inline/commit → lite, test/doc → basic). Works in IntelliJ, PyCharm, GoLand, WebStorm, Rider, CLion, DataGrip, RubyMine, RustRover, PhpStorm, and JetBrains Air.
 
 **Cursor** (fully UI-driven, Pro-gated): Cursor's native BYOK **cannot** be set from `settings.json` — it lives in an encrypted, server-synced store and custom OpenAI endpoints require **Cursor Pro/Ultra**. `on` prints the Settings → Models paste-in values (OpenAI API Key, Override Base URL → `…/v1`, the NeoSmith SKUs to Add + Verify). The fully scriptable alternative — no Pro license needed — is `neosmith claude on` plus the Claude Code extension in Cursor.
+
+---
+
+## Every tier is installed, not just the one you wired
+
+`GET /v1/models` returns model **ids only** — no context window, no capabilities. A client with a custom endpoint therefore has no way to discover that `neosmith.intelligent-pro` holds 1M tokens, and falls back to a conservative default that compacts far too early.
+
+So `on` writes the whole catalogue, with each SKU's real window, for every harness whose config has somewhere to put it:
+
+| Harness | Where | Field that carries the window |
+|---|---|---|
+| Claude Code | tier ladder in `settings.json` | *(none — the Anthropic client knows)* |
+| Cline | `models.json` | `contextWindow` |
+| Continue | `config.yaml` | `defaultCompletionOptions.contextLength` |
+| Copilot Chat | `chatLanguageModels.json` | `maxInputTokens` |
+| Zed | `available_models` | `max_tokens` — **Zed's name for the context window** |
+| OpenCode | `provider.neosmith.models` | `limit.context` |
+| OpenClaw | `models.providers.neosmith.models` | `contextWindow` |
+| Junie CLI | one profile file per SKU | `maxContextLength` |
+
+`neosmith.neolite` is 512K — the sealed budget tier — and the other three are 1M. Codex is the one exception: `config.toml` has no catalogue to populate, just `model = "…"` and a generic provider, and you type any SKU at `/model`.
+
+The practical payoff: switching tiers inside these tools does **not** re-run `on`, so an unregistered SKU is not selectable at all. With all four registered you switch in the tool's own picker.
+
+`tests/../scripts/contract/model-catalogue.test.js` enforces this — every harness is either in the catalogue table or exempt with a written reason.
 
 ---
 
