@@ -1,7 +1,7 @@
 {
   "name": "@neosmithai/cli",
   "version": "0.9.0",
-  "description": "Route AI coding agents (Claude Code, Codex, Continue, Cline, OpenCode, OpenClaw, Junie CLI, JetBrains AI) through the NeoSmith router \u2014 same experience, ~60% lower inference cost.",
+  "description": "Route AI coding agents (Claude Code, Codex, Continue, Cline, OpenCode, OpenClaw, Junie CLI, JetBrains AI) through the NeoSmith router — same experience, ~60% lower inference cost.",
   "keywords": [
     "claude",
     "claude-code",

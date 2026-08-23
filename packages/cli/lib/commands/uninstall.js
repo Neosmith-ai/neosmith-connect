@@ -20,13 +20,29 @@
 // remaining judgement call. The PATH line install.sh added is reported rather
 // than deleted; see reportPathEntry() for why.
 //
-// The npm-global install is a THIRD way `neosmith` gets onto a machine, and
-// this command cannot remove it: `npm uninstall -g` is npm's job, and its files
-// live under npm's prefix, not ours. Uninstall used to end with a conditional
-// footnote — "If you also installed via npm…" — and call itself Done. On a
-// machine where npm IS the install, that reads as success while the binary the
-// user just invoked keeps working. It is not a guess: the running module's own
-// path says which copy is executing, so we detect it and say so as fact.
+// The npm-global install is a THIRD way `neosmith` gets onto a machine.
+// Uninstall used to end with a conditional footnote — "If you also installed
+// via npm…" — and call itself Done. On a machine where npm IS the install,
+// that reads as success while the binary the user just invoked keeps working.
+// It is not a guess: the running module's own path says which copy is
+// executing, so we detect it and say so as fact.
+//
+// That fix covered only HALF the problem, and the other half is the one people
+// actually hit. The running module's path settles it when you ran the npm copy
+// — but you can equally run `node bin/neosmith.js uninstall` from a checkout,
+// or the installer's copy under ~/.neosmith/cli, on a machine that ALSO has a
+// global npm install. From there __dirname says nothing about npm, so it fell
+// back to the dim conditional footnote and printed "Done." while `neosmith`
+// stayed on PATH. Reported from the field, and the reason globalNpmInstalls()
+// exists: the machine can simply be looked at, so look at it, whichever copy
+// is running.
+//
+// Removing it is npm's job — its files live under npm's prefix, not ours, and
+// its registry bookkeeping is not ours to edit. But we can invoke npm, and
+// when the copy being removed is NOT the one executing there is no
+// self-deletion hazard, so `uninstall` offers to run it. When you ARE running
+// the npm copy it can only tell you: deleting the tree a live process was
+// loaded from fails outright on Windows.
 //
 // A launcher pointing at a live target is NOT touched: install.sh supports
 // running from a local checkout (`CLI=/path/to/checkout`), in which case the
@@ -130,10 +146,17 @@ async function run(args) {
   reportPathEntry();
   reportWindowsPathEntry();
 
-  // The npm-installed copy is a separate install with its own lifecycle; this
-  // command cannot uninstall it, and staying silent leaves the user thinking
-  // `neosmith` should be gone when it isn't.
-  const npmRoot = reportNpmInstall();
+  // The npm-installed copy is a separate install with its own lifecycle, and
+  // staying silent leaves the user thinking `neosmith` should be gone when it
+  // isn't. We CAN hand a global copy to npm when it is not the copy running —
+  // ask first, unless the invocation already said yes.
+  const npmRoot = await reportNpmInstall({
+    confirm: async () => {
+      if (skipConfirm || removeAll) return true;
+      if (!ui.isTTY) return false; // never spawn a package manager unprompted
+      return ui.confirm("  Remove it now with `npm uninstall -g @neosmithai/cli`?");
+    },
+  });
 
   ui.log("");
   // "Done" is only true when nothing that provides the command is left. Saying
@@ -271,27 +294,138 @@ function isGlobalNpmRoot(root) {
   return r.includes("/lib/node_modules/@neosmithai/cli") || /\/npm\/node_modules\/@neosmithai\/cli$/.test(r);
 }
 
-function reportNpmInstall() {
-  const root = npmInstallRoot();
+// Where npm puts global packages. Derived rather than shelled out to: `npm
+// root -g` costs half a second, and npm is not guaranteed to be on PATH of the
+// process running us (the installer's copy is invoked by absolute path).
+function globalNpmPrefixes() {
+  const seen = new Set();
+  const out = [];
+  const add = (p) => {
+    if (!p) return;
+    const norm = String(p).replace(/\\/g, "/").replace(/\/+$/, "");
+    if (!norm || seen.has(norm.toLowerCase())) return;
+    seen.add(norm.toLowerCase());
+    out.push(norm);
+  };
+
+  // Set by npm itself, and by anyone who has moved their global prefix.
+  add(process.env.npm_config_prefix);
+  add(process.env.PREFIX);
+
+  if (process.platform === "win32") {
+    add(path.join(process.env.APPDATA || "", "npm"));
+  } else {
+    add("/usr/local");
+    add("/usr");
+    add("/opt/homebrew");
+    add(path.join(io.HOME, ".npm-global"));
+    add(path.join(io.HOME, ".npm-packages"));
+    add(path.join(io.HOME, ".local"));
+  }
+  // Whichever node is running us lives at <prefix>/bin/node, and nvm / asdf /
+  // homebrew installs keep their global node_modules under that same prefix.
+  add(path.dirname(path.dirname(process.execPath)));
+  return out;
+}
+
+// Every globally installed @neosmithai/cli on this machine — independent of
+// which copy is executing. This is the check that was missing.
+function globalNpmInstalls() {
+  const seen = new Set();
+  const found = [];
+  for (const prefix of globalNpmPrefixes()) {
+    for (const rel of ["node_modules/@neosmithai/cli", "lib/node_modules/@neosmithai/cli"]) {
+      const dir = path.join(prefix, rel).replace(/\\/g, "/");
+      if (seen.has(dir.toLowerCase())) continue;
+      if (!io.fileExists(path.join(dir, "package.json"))) continue;
+      seen.add(dir.toLowerCase());
+      found.push(dir);
+    }
+  }
+  return found;
+}
+
+// Hand the removal to npm. Returns { ok, output } — never throws, because a
+// failure here must not abort an uninstall that has already done its real work.
+function runNpmUninstall() {
+  if (process.env.NEOSMITH_DRY_RUN === "1") {
+    return { ok: false, skipped: "dry-run", output: "" };
+  }
+  const { spawnSync } = require("child_process");
+  // shell: true so Windows resolves npm.cmd; npm is not an .exe there.
+  const r = spawnSync("npm", ["uninstall", "-g", "@neosmithai/cli"], {
+    encoding: "utf8", shell: true,
+  });
+  const output = ((r.stdout || "") + (r.stderr || "")).trim();
+  return { ok: r.status === 0, output };
+}
+
+// `opts.confirm` is an async predicate so the caller owns the interaction
+// policy; tests pass a stub.
+// `opts.running` overrides which copy is considered "the one executing" —
+// __dirname cannot be faked, and the self-deletion branch is the one that most
+// needs a test.
+async function reportNpmInstall(opts = {}) {
+  const running = "running" in opts ? opts.running : npmInstallRoot();
+  const globals = opts.globals || globalNpmInstalls();
+  const runningIsGlobal = !!(running && isGlobalNpmRoot(running));
+
+  // The copy executing right now cannot delete its own tree — on Windows the
+  // unlink fails outright while the process holds it.
+  const removable = globals.filter((g) => !running || g.toLowerCase() !== running.toLowerCase());
+
   ui.log("");
-  if (!root) {
-    // Can't see one from here, but a global copy may still exist independently
-    // of the one running — so the conditional phrasing is honest in this branch.
-    ui.log(ui.c("dim", `If you also installed via npm, remove that copy with:`));
-    ui.log(ui.c("dim", `    npm uninstall -g @neosmithai/cli`));
+
+  if (!running && !globals.length) {
+    // Genuinely nothing npm-installed that we can see. No footnote: a
+    // conditional warning that always fires is one nobody reads.
     return null;
   }
-  if (isGlobalNpmRoot(root)) {
-    ui.warn(`\`neosmith\` is STILL INSTALLED — the copy you just ran is npm's, and this command cannot remove it.`);
-    ui.log(ui.c("dim", `    ${root}`));
+
+  // The copy executing right now, if any. Reported but never removed — see the
+  // header. This does NOT return early: a machine can carry a second global
+  // copy under a different prefix (an nvm switch, a leftover /usr/local), and
+  // that one has no self-deletion hazard and must still be offered.
+  if (runningIsGlobal) {
+    ui.warn(`\`neosmith\` is STILL INSTALLED — the copy you just ran is npm's, and it cannot remove itself.`);
+    ui.log(ui.c("dim", `    ${running}`));
     ui.log(`  Finish removing it with:`);
     ui.log(ui.c("bold", `    npm uninstall -g @neosmithai/cli`));
-  } else {
+  } else if (running) {
     ui.warn(`\`neosmith\` is STILL INSTALLED — you ran a copy from node_modules, which this command does not manage.`);
-    ui.log(ui.c("dim", `    ${root}`));
+    ui.log(ui.c("dim", `    ${running}`));
     ui.log(ui.c("dim", `  Remove it from the project that depends on it.`));
   }
-  return root;
+
+  if (!removable.length) return running;
+
+  // A global install exists and is NOT the copy executing, so npm can remove
+  // it safely from here.
+  ui.warn(`\`neosmith\` is STILL INSTALLED globally via npm:`);
+  for (const g of removable) ui.log(ui.c("dim", `    ${g}`));
+
+  const confirm = opts.confirm || (async () => false);
+  if (await confirm()) {
+    ui.log(ui.c("dim", `  Running \`npm uninstall -g @neosmithai/cli\` …`));
+    const res = runNpmUninstall();
+    if (res.ok) {
+      ui.ok(`npm removed the global install.`);
+      // Still not "Done." if the copy we are executing is itself npm-managed.
+      return running || null;
+    }
+    if (res.skipped) {
+      ui.log(ui.c("dim", `  Skipped (${res.skipped}). Run it yourself:  npm uninstall -g @neosmithai/cli`));
+      return running || removable[0];
+    }
+    ui.warn(`npm could not remove it. Run it yourself:`);
+    ui.log(ui.c("bold", `    npm uninstall -g @neosmithai/cli`));
+    if (res.output) ui.log(ui.c("dim", `    ${res.output.split("\n")[0]}`));
+    return removable[0];
+  }
+
+  ui.log(`  Finish removing it with:`);
+  ui.log(ui.c("bold", `    npm uninstall -g @neosmithai/cli`));
+  return running || removable[0];
 }
 
 // ── Windows PATH ────────────────────────────────────────────────────────────
@@ -341,6 +475,9 @@ module.exports = {
   launcherTarget, normalizeTarget, isDeadLauncher, removeLaunchers,
   isNeosmithPathLine, reportPathEntry, LAUNCHER_PATHS,
   npmInstallRoot, isGlobalNpmRoot, reportNpmInstall,
+  // The "is it still installed somewhere else" probe — the half that was
+  // missing when uninstall was run from a checkout.
+  globalNpmPrefixes, globalNpmInstalls,
   windowsPathEntries, reportWindowsPathEntry,
   survivingHarnesses,
 };
