@@ -138,7 +138,7 @@ Every command supports `--help`. Run `neosmith help` or `neosmith <harness> help
 | **Claude Code** | `neosmith claude` | `~/.claude/settings.json` (0600) + VS Code/Cursor `claudeCode.*` if the extension is installed | `ANTHROPIC_AUTH_TOKEN` literal (0600) | Restart after |
 | **Codex** | `neosmith codex` | `~/.codex/config.toml` (0600) | `$OPENAI_API_KEY` (env-key ref) | Restart after; export the printed line |
 | **Continue** | `neosmith continue` | `~/.continue/config.yaml` (0600) — one model entry per SKU | `apiKey` literal (0600) | Reload VS Code window |
-| **Cline** | `neosmith cline` | `~/.cline/data/settings/providers.json` + `models.json` (0600) — read by Cline 4.x in VS Code/JetBrains **and** the standalone Cline CLI | `apiKey` literal (0600) | Reload the Cline panel |
+| **Cline** | `neosmith cline` | `~/.cline/data/settings/providers.json` (the **selected** provider + model) + `models.json` (the **catalogue**, all SKUs) — read by Cline 4.x in VS Code/JetBrains **and** the standalone Cline CLI | `apiKey` literal (0600) | Reload the Cline panel |
 | **JetBrains AI** | `neosmith jetbrains` | *(none — UI-driven)* | JetBrains IDE storage | Paste into Settings UI |
 | **Copilot Chat** | `neosmith copilot` | VS Code `chatLanguageModels.json` — one model entry per SKU (key in OS-keychain) | OS-keychain (SecretStorage) | Reload window; paste key in picker once |
 | **Zed** | `neosmith zed` | `~/.config/zed/settings.json` (0600) — one `available_models` entry per SKU | literal (0600) | Restart Zed |
@@ -195,9 +195,15 @@ Claude Code lists two entries when the IDE extension is wired — the CLI config
 Cline is a single product with three front ends — the VS Code extension, the JetBrains plugin, and the standalone `cline` CLI — and since 4.x they share one global config:
 
 ```
-($CLINE_DIR || ~/.cline)/data/settings/providers.json   # provider, key, model, baseUrl
-($CLINE_DIR || ~/.cline)/data/settings/models.json      # context window + capabilities
+($CLINE_DIR || ~/.cline)/data/settings/providers.json   # provider, key, baseUrl, SELECTED model
+($CLINE_DIR || ~/.cline)/data/settings/models.json      # the CATALOGUE — every SKU + its window
 ```
+
+The split trips people up: `providers.json` carries a single `model` field, so
+reading only that file makes it look as though one model was registered. It is
+the model currently *in use*. `models.json` is the registry Cline enumerates,
+and `on` puts all four NeoSmith SKUs there — which is what makes the other
+tiers selectable without re-running it.
 
 `neosmith cline on` writes both, registers the `openai-compatible` provider, and sets `lastUsedProvider` so the provider it wrote is the one Cline actually uses — a wired-but-unselected provider is a no-op, and `neosmith cline status` says so explicitly if you switch away in the UI later. `CLINE_PROVIDER_SETTINGS_PATH` relocates `providers.json`; the CLI follows it.
 
@@ -232,7 +238,7 @@ So `on` writes the whole catalogue, with each SKU's real window, for every harne
 | Harness | Where | Field that carries the window |
 |---|---|---|
 | Claude Code | tier ladder in `settings.json` | *(none — the Anthropic client knows)* |
-| Cline | `models.json` | `contextWindow` |
+| Cline | `models.json` (**not** `providers.json`) | `contextWindow` |
 | Continue | `config.yaml` | `defaultCompletionOptions.contextLength` |
 | Copilot Chat | `chatLanguageModels.json` | `maxInputTokens` |
 | Zed | `available_models` | `max_tokens` — **Zed's name for the context window** |

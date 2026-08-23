@@ -250,3 +250,52 @@ test("catalogue: continue registers the tiers in the yaml-less fallback too", ()
   }
   assert.match(text, /contextLength: 512000/, "neolite's real window must survive the fallback path");
 }));
+
+test("catalogue: cline's capability strings are members of the enum Cline validates against", () => withSandbox(() => {
+  const { harness } = loadAll();
+  const mod = harness.get("cline");
+  mod.on({ key: KEY, model: harness.resolveModel("pro") });
+
+  // Cline parses models.json with a zod schema and DISCARDS THE WHOLE REGISTRY
+  // on a validation failure — its own message is "models.json content is not a
+  // valid models file envelope; starting from an empty registry". So a
+  // capability string that is not an enum member does not degrade one entry,
+  // it silently unregisters all four and every SKU falls back to Cline's
+  // conservative defaults. Nothing surfaces; the models just behave small.
+  //
+  // Read out of the installed bundle on 2026-08-23 (saoudrizwan.claude-dev
+  // 4.1.13, next/dist/extension.js). Note the near-misses: "vision" and
+  // "popular" belong to OTHER enums in the same bundle and would fail here.
+  const VALID = new Set(["images", "video", "tools", "streaming", "prompt-cache",
+    "reasoning", "reasoning-effort", "computer-use", "global-endpoint",
+    "structured_output", "temperature", "files"]);
+
+  const catalog = readJSON(mod.modelsFile).providers["openai-compatible"].models;
+  for (const [sku, m] of Object.entries(catalog)) {
+    for (const cap of m.capabilities || []) {
+      assert.ok(VALID.has(cap),
+        `${sku}: "${cap}" is not a member of Cline's capability enum — the whole registry ` +
+        `would be rejected, not just this entry`);
+    }
+  }
+  assert.ok(catalog["neosmith.intelligent-pro"].capabilities.includes("tools"),
+    "Cline's agentic loop needs tool calling");
+}));
+
+test("catalogue: cline's models.json is the registry; providers.json holds the SELECTION", () => withSandbox(() => {
+  const { harness } = loadAll();
+  const mod = harness.get("cline");
+  mod.on({ key: KEY, model: harness.resolveModel("basic") });
+
+  // These two files answer different questions, and reading only providers.json
+  // makes it look like one model is registered.
+  const selected = readJSON(mod.configFile).providers["openai-compatible"].settings;
+  assert.equal(selected.model, "neosmith.intelligent-basic",
+    "providers.json carries ONE model — the one currently in use");
+
+  const registry = readJSON(mod.modelsFile).providers["openai-compatible"];
+  assert.equal(Object.keys(registry.models).length, 4,
+    "models.json carries the whole catalogue, which is what makes the other tiers selectable");
+  assert.equal(registry.provider.defaultModelId, "neosmith.intelligent-basic",
+    "and its default agrees with the selection");
+}));
