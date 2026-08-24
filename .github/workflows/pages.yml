@@ -2,10 +2,11 @@
 # configuration with an actions/deploy-pages workflow. Source path is
 # site/docs/, which feeds Jekyll → _site → GitHub Pages artifact.
 #
-# Prerequisite: the repo's "Build source" Pages setting must be flipped
-# from "Branch: /docs on main" to "GitHub Actions" (one-time, in repo
-# Settings → Pages). Until that's flipped, builds succeed locally but
-# Pages serves the legacy /docs/ directory.
+# The repo's Pages "Build source" is set to GitHub Actions — confirmed via
+# `gh api repos/Neosmith-ai/neosmith-connect/pages` (build_type: "workflow"),
+# so this workflow is what serves the site. The note that used to sit here said
+# the setting still needed flipping; it had been done, and a stale prerequisite
+# is worse than none — it invites someone to "fix" a setting that is correct.
 
 name: pages
 

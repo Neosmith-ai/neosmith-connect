@@ -4,7 +4,7 @@ Route AI coding agents through the [NeoSmith router](https://router.neosmith.ai)
 
 NeoSmith routes cheap traffic to a distilled SLM and escalates to Claude Opus only when a task actually needs it. A verifier catches regressions, so output quality stays Opus-class.
 
-> **This is the canonical NeoSmith CLI guide.** It is the file `npm view @neosmithai/cli` renders and the README shipped inside the package. The developer-guide site (<https://neosmith-ai.github.io/neosmith-connect/>) mirrors it for per-harness deep dives; if anything here and the site disagree, **this file is authoritative**.
+> **This is the canonical NeoSmith CLI guide.** It is the file `npm view @neosmithai/cli` renders and the README shipped inside the package. The [developer-guide site](https://neosmith-ai.github.io/neosmith-connect/) mirrors it for per-harness deep dives; if anything here and the site disagree, **this file is authoritative**.
 
 ---
 
