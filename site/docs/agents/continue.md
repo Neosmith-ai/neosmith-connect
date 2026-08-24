@@ -68,4 +68,4 @@ Open the Continue chat panel, select **NeoSmith**, and ask a question. To confir
 
 - **No response / 404:** Ensure `apiBase` ends in `/v1`.
 - **400 Unknown model:** Use a `neosmith.*` SKU.
-- More: [Troubleshooting](../reference/troubleshooting)
+- More: [reference/troubleshooting.md](../reference/troubleshooting)

@@ -107,4 +107,4 @@ curl.exe -s https://router.neosmith.ai/whoami -H "Authorization: Bearer sk-plus-
 
 ## Next
 
-Pick your IDE or agent guide from the [Home]({{ site.baseurl }}/).
+Pick your IDE or agent guide from the [main README]({{ site.baseurl }}/).

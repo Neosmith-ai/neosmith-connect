@@ -32,32 +32,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Verify that the manifest-driven docs generator is up-to-date with
-      # what's actually committed. Drift here means the manifest changed
-      # but generate-docs.js wasn't re-run; we fail before building.
+      # The manifest-driven blocks must match the manifest. Drift means
+      # harnesses.json changed and generate-docs.js was not re-run; fail
+      # before building rather than publishing a stale table.
       - uses: actions/setup-node@v4
         with: { node-version: "20" }
       - name: Verify manifest-driven docs match the manifest
-        # generate-docs.js maintains site/README.md "AI Coding Agents" and
-        # site/COMPATIBILITY.md "Agents × Endpoint" tables — drift here would
-        # mean a harness was added to harnesses.json but the generator wasn't
-        # re-run.
+        # generate-docs.js owns five blocks under site/docs/ — the landing-page
+        # harness table, the compatibility matrix, the Agents index, and the
+        # endpoints + SKU tables. Drift means harnesses.json changed and the
+        # generator was not re-run.
         run: node scripts/generate-docs.js --check
-      - name: Jekyll mirror — missing pages fail, drift is ratcheted
-        # Two different failures, two different verdicts.
-        #
-        # MISSING is fatal. site/docs/ is the directory Jekyll builds, so a
-        # source page with no mirror is never published — every link to it is a
-        # 404. agents/copilot.md and agents/zed.md did exactly that from 0.3.0
-        # until it was noticed by hand.
-        #
-        # DRIFT is reported, not gated. The mirror carries hand-edited content an
-        # automated re-generation cannot reproduce (see the script header), and
-        # the count is not stable across runners — a Windows checkout counted two
-        # more than a Linux one for the same commit. A threshold that depends on
-        # the runner is one people re-run instead of reading.
-        # `--max-drift=N` is still there for local use.
-        run: node scripts/sync-docs-mirror.js --check
 
       - uses: ruby/setup-ruby@v1
         with:

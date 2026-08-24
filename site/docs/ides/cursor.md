@@ -14,6 +14,27 @@ Cursor is a VS Code fork with strong native BYOM support. You have two paths:
 | **A** | Claude Code extension | `router.neosmith.ai` | No | Full agentic features, scriptable via CLI |
 | **B** | Cursor native BYOM | `router.neosmith.ai/v1` | **Yes (Pro/Ultra)** | Chat + inline edits, UI-only |
 
+---
+
+## Path A — Claude Code (recommended; scriptable, no Pro needed)
+
+Cursor inherits VS Code's extension ecosystem, so the Claude Code extension works:
+
+```bash
+npx @neosmithai/cli init sk-plus-yourname-xxxxxx
+```
+
+(or `neosmith claude on` if you're already logged in)
+
+This writes the full NeoSmith config — connection vars plus the branded per-tier
+model ladder — into `~/.claude/settings.json`. Then install the extension
+(Cursor's Extensions panel → search "Claude Code"), and press **Cmd+Esc** /
+**Ctrl+Esc** to open the panel.
+
+> Full details: [agents/claude-code.md](../agents/claude-code)
+
+---
+
 ## Path B — Cursor native BYOM (requires Cursor Pro/Ultra)
 
 > **Important:** Cursor's native BYOK **cannot** be configured by writing to

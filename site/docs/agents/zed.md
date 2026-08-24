@@ -21,6 +21,14 @@ macOS    ~/Library/Application Support/Zed/settings.json
 Windows  %APPDATA%\Zed\settings.json
 ```
 
+---
+
+## Install
+
+See [zed.dev](https://zed.dev) — Zed ships as a native app on macOS, Linux and Windows.
+
+---
+
 ## Configure
 
 ### With the NeoSmith CLI (recommended)

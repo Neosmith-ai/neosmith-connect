@@ -2,11 +2,11 @@
 //
 // For each harness that is currently `on`, dispatch the matching live request
 // to the NeoSmith router using the stored key. Recipes are ported verbatim
-// from site/reference/verify-connection.md — the bodies are intentionally
+// from site/docs/reference/verify-connection.md — the bodies are intentionally
 // 1-token probes so we don't burn credits.
 //
 // Failure modes are mapped against the symptom-first troubleshooting table at
-// site/reference/troubleshooting.md and printed as remediation lines rather
+// site/docs/reference/troubleshooting.md and printed as remediation lines rather
 // than stack traces.
 
 "use strict";

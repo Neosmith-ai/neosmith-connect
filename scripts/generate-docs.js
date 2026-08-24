@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 // scripts/generate-docs.js
 //
-// Rewrites the manifest-driven sections of `site/README.md` and
-// `site/COMPATIBILITY.md` from `harnesses.json` at the monorepo root.
+// Rewrites the manifest-driven sections of the developer guide under
+// `site/docs/` from `harnesses.json` at the monorepo root.
 //
 // Marker form:
 //   <!-- BEGIN manifest:<block-id> --> ... <!-- END manifest:<block-id> -->
 //
 // Invariants:
-//   - The "AI Coding Agents" table in `site/README.md` is rebuilt from the
-//     manifests's harnesses array, ordered by registryOrder.
-//   - The "Agents × Endpoint" table in `site/COMPATIBILITY.md` is rebuilt.
+//   - The "AI Coding Agents" table in `site/docs/index.md` is rebuilt from
+//     the manifest's harnesses array, ordered by registryOrder.
+//   - The "Agents × Endpoint" table in `site/docs/compatibility.md` is rebuilt.
 //   - Every other block in those files is left untouched.
 //
 // Idempotent — running this without changes is a no-op.
@@ -145,15 +145,47 @@ function generateSkuTable(manifest) {
   return ["| Model SKU | Tier | Context | Behaviour |", "|---|---|---|---|", ...rows].join("\n");
 }
 
+// The "Every supported harness" table on the guide's landing page. Was
+// hand-written, listed eight harnesses, and told readers Cursor writes
+// `cursor.models.*` to VS Code settings — which harnesses.json records as
+// verified FALSE ("the string 'cursor.models.' never appears in Cursor's
+// workbench bundle"). Published advice to write settings the tool ignores.
+const KEY_STORAGE = {
+  "literal-anthropic-token": "literal in its config (0600)",
+  "literal-openai-key": "literal in its config (0600)",
+  "env-key-ref": "`$OPENAI_API_KEY` — an env reference, never the key itself",
+  "ui-driven": "entered in the tool's own UI",
+  "ui-keychain": "OS keychain (VS Code SecretStorage)",
+};
+
+function generateHarnessTable(manifest) {
+  const rows = manifestHarnessesSorted(manifest).map((h, i) => {
+    const written = h.configFile
+      ? (h.configFile.startsWith("vscode://")
+        ? "VS Code `chatLanguageModels.json` (per profile)"
+        : "`" + h.configFile + "` (0600)")
+      : "*(none — configured in the tool's UI)*";
+    const key = KEY_STORAGE[h.keyMode] || h.keyMode;
+    return `| ${i + 1} | **${h.shortLabel || h.name}** | ${written} | ${key} |`;
+  });
+  return ["| # | Harness | What gets written | Where the key lives |", "|---|---|---|---|", ...rows].join("\n");
+}
+
 // Targets — each: [absolute path, block id, body generator].
+//
+// All of these live under site/docs/, which is the only documentation tree:
+// Jekyll builds it and Pages serves it. There used to be a second copy under
+// site/ that these blocks were ALSO generated into, and keeping two hand-copied
+// trees in step is what put 119 lines of written documentation on the floor —
+// including the whole Authentication section of the troubleshooting reference.
 const TARGETS = [
   [
-    path.join(MONOREPO_ROOT, "site", "README.md"),
-    "agents",
-    generateAgentsTable,
+    path.join(MONOREPO_ROOT, "site", "docs", "index.md"),
+    "harnesses",
+    generateHarnessTable,
   ],
   [
-    path.join(MONOREPO_ROOT, "site", "COMPATIBILITY.md"),
+    path.join(MONOREPO_ROOT, "site", "docs", "compatibility.md"),
     "agents-endpoint",
     generateAgentsEndpointTable,
   ],
@@ -162,21 +194,6 @@ const TARGETS = [
     "agents-index",
     generateAgentsIndexTable,
   ],
-  [
-    path.join(MONOREPO_ROOT, "site", "reference", "endpoints.md"),
-    "endpoints",
-    generateEndpointsTable,
-  ],
-  [
-    path.join(MONOREPO_ROOT, "site", "reference", "endpoints.md"),
-    "skus",
-    generateSkuTable,
-  ],
-  // The Jekyll mirror is otherwise hand-maintained (see sync-docs-mirror.js),
-  // but these two blocks are pure manifest projections with no links to rewrite,
-  // so they are identical on both sides. Generating them here is what stops the
-  // PUBLISHED site from keeping a de-listed SKU after the source page drops it —
-  // which is exactly what had happened.
   [
     path.join(MONOREPO_ROOT, "site", "docs", "reference", "endpoints.md"),
     "endpoints",

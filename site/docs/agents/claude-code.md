@@ -113,7 +113,7 @@ npx @neosmithai/cli uninstall
 
 ## Option 2: Manual env vars
 
-Set these in your shell profile (see your [platform guide](../README#platform-setup-operating-system) for the exact file and OS specifics):
+Set these in your shell profile (see your [platform guide]({{ site.baseurl }}/#platform-setup-operating-system) for the exact file and OS specifics):
 
 ```bash
 export ANTHROPIC_BASE_URL=https://router.neosmith.ai

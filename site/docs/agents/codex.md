@@ -17,7 +17,7 @@ Codex (OpenAI's CLI coding agent) speaks the **OpenAI Responses API** (`/v1/resp
 
 ## Setup
 
-Codex reads OpenAI environment variables. Set them in your shell profile (see your [platform guide]({{ site.baseurl }}/#platforms)):
+Codex reads OpenAI environment variables. Set them in your shell profile (see your [platform guide]({{ site.baseurl }}/#platform-setup-operating-system)):
 
 ```bash
 export OPENAI_BASE_URL=https://router.neosmith.ai/v1
@@ -79,4 +79,4 @@ Expected: a Responses-API body with an `output` array of items, plus `neosmith_m
 
 ## Troubleshooting
 
-See [Troubleshooting](../reference/troubleshooting). If Codex errors on model validation, confirm you set `model = "neosmith.intelligent-pro"` (not `gpt-*`, which NeoSmith rejects with 400).
+See [reference/troubleshooting.md](../reference/troubleshooting). If Codex errors on model validation, confirm you set `model = "neosmith.intelligent-pro"` (not `gpt-*`, which NeoSmith rejects with 400).

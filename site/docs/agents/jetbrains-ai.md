@@ -78,4 +78,4 @@ Open the AI Assistant chat panel (**View → Tool Windows → AI Assistant**) an
 ## Troubleshooting
 
 - **Test Connection fails:** URL must be exactly `https://router.neosmith.ai/v1` (include `/v1`, no trailing slash); ensure Tool calling is enabled.
-- More: [Troubleshooting](../reference/troubleshooting)
+- More: [reference/troubleshooting.md](../reference/troubleshooting)

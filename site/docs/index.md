@@ -312,16 +312,21 @@ You can change tiers any time by re-running `on` with a new `--model`. The CLI u
 
 ## Every supported harness
 
-| # | Harness | What gets written | Do you need a restart? |
+<!-- BEGIN manifest:harnesses -->
+| # | Harness | What gets written | Where the key lives |
 |---|---|---|---|
-| 1 | **Claude Code** | `~/.claude/settings.json` (0600) | Yes — quit and reopen |
-| 2 | **Codex** | `~/.codex/config.toml` (0600) + `export OPENAI_API_KEY=…` for your shell | Yes — restart Codex |
-| 3 | **Continue** | `~/.continue/config.yaml` (0600) | Yes — reload VS Code window |
-| 4 | **Cline** | `~/.cline/data/settings/providers.json` + `models.json` (0600) — shared by the extension and the standalone CLI | Yes — reload the Cline panel (on 3.x: paste into the gear-icon UI) |
-| 5 | **JetBrains AI** | *(none — JetBrains stores in IDE settings)* | Yes — paste into **Settings → Tools → AI Assistant → Providers & API Keys** |
-| 6 | **Copilot Chat** | VS Code `chatLanguageModels.json` (key in OS-keychain) | Yes — reload window |
-| 7 | **Zed** | `~/.config/zed/settings.json` (0600) | Yes — restart Zed |
-| 8 | **Cursor** | VS Code settings (`cursor.models.*`) | Yes — reload window |
+| 1 | **Claude Code** | `~/.claude/settings.json` (0600) | literal in its config (0600) |
+| 2 | **Codex** | `~/.codex/config.toml` (0600) | `$OPENAI_API_KEY` — an env reference, never the key itself |
+| 3 | **Continue** | `~/.continue/config.yaml` (0600) | literal in its config (0600) |
+| 4 | **Cline** | `~/.cline/data/settings/providers.json` (0600) | literal in its config (0600) |
+| 5 | **JetBrains AI** | *(none — configured in the tool's UI)* | entered in the tool's own UI |
+| 6 | **Copilot Chat** | VS Code `chatLanguageModels.json` (per profile) | OS keychain (VS Code SecretStorage) |
+| 7 | **Zed** | `~/.config/zed/settings.json` (0600) | literal in its config (0600) |
+| 8 | **Cursor** | *(none — configured in the tool's UI)* | entered in the tool's own UI |
+| 9 | **OpenCode** | `~/.config/opencode/opencode.json` (0600) | literal in its config (0600) |
+| 10 | **OpenClaw** | `~/.openclaw/openclaw.json` (0600) | literal in its config (0600) |
+| 11 | **Junie CLI** | `~/.junie/models/neosmith.json` (0600) | literal in its config (0600) |
+<!-- END manifest:harnesses -->
 
 Use `neosmith <harness> help` for per-harness notes (e.g. `--autocomplete` is a Continue-only flag). Per-harness deep dives live under [Agents](agents/) and per-IDE deep dives under [IDEs](ides/).
 

@@ -42,7 +42,7 @@ In Antigravity's Extensions panel, search **"Claude Code"** and install `anthrop
 
 Press **Cmd+Esc** (Mac) / **Ctrl+Esc** (Windows/Linux). The extension picks up the env vars automatically and routes through NeoSmith.
 
-> Full Claude Code details: [Claude Code setup](../agents/claude-code)
+> Full Claude Code details: [agents/claude-code.md](../agents/claude-code)
 
 ---
 
@@ -53,4 +53,4 @@ Antigravity does not expose a setting to override the model base URL for its bui
 ## Troubleshooting
 
 - **Panel "Not connected":** Confirm `echo $ANTHROPIC_BASE_URL` prints `https://router.neosmith.ai`; restart Antigravity from a shell that has the env vars (or set them at system level — see platform guides).
-- More: [Troubleshooting](../reference/troubleshooting)
+- More: [reference/troubleshooting.md](../reference/troubleshooting)
