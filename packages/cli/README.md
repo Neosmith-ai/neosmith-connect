@@ -1,6 +1,6 @@
 # @neosmithai/cli
 
-Route AI coding agents through the [NeoSmith router](https://router.neosmith.ai) — same experience, ~60% lower inference cost. One CLI, one key, eight harnesses: **Claude Code, Codex, Continue, Cline, JetBrains AI, Copilot Chat, Zed, Cursor**.
+Route AI coding agents through the [NeoSmith router](https://router.neosmith.ai) — same experience, ~60% lower inference cost. One CLI, one key, eleven harnesses: **Claude Code, Codex, Continue, Cline, JetBrains AI, Copilot Chat, Zed, Cursor, OpenCode, OpenClaw, Junie CLI**.
 
 NeoSmith routes cheap traffic to a distilled SLM and escalates to Claude Opus only when a task actually needs it. A verifier catches regressions, so output quality stays Opus-class.
 
@@ -16,7 +16,19 @@ NeoSmith routes cheap traffic to a distilled SLM and escalates to Claude Opus on
 authoritative source for install commands — this README points instead of
 duplicating, which is how it drifted before).
 
-Or, if you already have Node 18+ and want to skip the installer:
+Or, if you already have Node 18+, install straight from npm:
+
+```bash
+npm install -g @neosmithai/cli
+```
+
+> **The `-g` is load-bearing.** Without it npm does a *local* install into
+> whatever directory you are standing in — it creates a `package.json` and
+> `node_modules` there, puts nothing on your `PATH`, and `neosmith` still
+> comes back `command not found`. See
+> [`neosmith` isn't recognized after `npm install`](#neosmith-isnt-recognized-after-npm-install).
+
+To try it once without installing anything:
 
 ```bash
 npx @neosmithai/cli login sk-plus-yourname-xxxxxx
@@ -115,6 +127,7 @@ If a harness shows `pass`, you're done. Open the tool, send any prompt, and you 
 | `neosmith <harness> off` | Restore a harness's pre-connect config, keeping any edits you made while connected. |
 | `neosmith <harness> status` | Show one harness's on/off state + model. |
 | `neosmith status` | Show all harnesses + stored key, and which of your settings files are backed up. |
+| `neosmith update [--check] [--yes]` | Move to the latest published version. Keeps your key, your wiring and your backups — only the CLI's own code is replaced. `--check` looks without installing. |
 | `neosmith keys [--reveal] [--json]` | Reprint the keys this machine is configured with, per environment, and say which harness is holding which. Masked by default. |
 | `neosmith originals [--show <harness>] [--export <dir>] [--json]` | Show where your pre-connect settings are stored, read one, or copy them all out. |
 | `neosmith verify` | Hit `/whoami` with the stored key. |
@@ -456,6 +469,32 @@ Two things are unlike every other harness here:
 
 ---
 
+## Updating
+
+```bash
+neosmith update --check     # what's available, installs nothing
+neosmith update             # asks, then installs
+neosmith update --yes       # no prompt (CI, scripts)
+```
+
+**Your settings are not touched.** That is worth stating plainly, because not knowing it is why people put updates off. The CLI's code and the CLI's state live in different places:
+
+| | |
+|---|---|
+| `~/.neosmith/cli/` | the installer's copy of the code — **replaced** |
+| `~/.neosmith/config.json` | your key, per environment — kept |
+| `~/.neosmith/state.json` | which harnesses are on, and the restore ledger — kept |
+| `~/.neosmith/snapshots/` | **your** pre-connect config files — kept |
+| `~/.neosmith/audit.log` | the write history — kept |
+
+`install.sh` removes only `~/.neosmith/cli`, and an npm-global update never touches `~/.neosmith` at all. Your harness configs — `~/.claude/settings.json`, `~/.codex/config.toml`, the rest — are not in scope either: they are written by `on` and read by `off`, and neither runs during an update. **A connected harness stays connected, with the same key.**
+
+Rather than just claim that, `update` checks it: the state files present beforehand are re-checked afterwards, and anything missing is reported loudly.
+
+`update` also works out *how* you installed and uses the matching route — `npm install -g` for an npm install, the installer one-liner for a curl-pipe install, and it declines to touch a git checkout (that's `git pull`) or a copy that is some project's dependency. If you ran it from a checkout but the copy on your `PATH` is npm's, it reports and updates the npm one.
+
+---
+
 ## Keys and storage
 
 - `~/.neosmith/config.json` holds your key as a plaintext literal (mode `0600`). No OS keychain — the CLI stores all harness keys as `0600` literals, intentionally, so it's sandbox-friendly and works after a restart without prompting.
@@ -487,6 +526,37 @@ Run `neosmith doctor` first — it gives one sentence per failed harness explain
 | Copilot: `neosmith copilot status` says `models-written` forever | You haven't entered the key in VS Code yet. Copilot Chat → Models → Manage Language Models → pick NeoSmith → paste key. Then `neosmith copilot status --confirmed`. |
 | macOS GUI app doesn't see the env vars | GUI apps read `~/.zprofile` (or `~/.zshenv`), not `~/.zshrc`. Launch the IDE from a terminal, or put the `export OPENAI_API_KEY=…` line in `~/.zprofile`. |
 | Something else | `neosmith status` shows every harness's state + whether a key is stored; `neosmith doctor` round-trips each connected one. |
+
+### `neosmith` isn't recognized after `npm install`
+
+You left off the `-g`:
+
+```
+C:\Users\you> npm install @neosmithai/cli
+C:\Users\you> neosmith
+'neosmith' is not recognized as an internal or external command
+```
+
+A local install drops the package into `./node_modules` and creates no launcher —
+only `-g` puts `neosmith` on your `PATH`. It also writes a `package.json` into
+whatever directory you were standing in, which is worth cleaning up: if that was
+your home directory, every later `npm install` and `npm audit` there reports on it.
+
+```bash
+# from wherever the stray package.json landed
+rm -rf package.json package-lock.json node_modules   # PowerShell: Remove-Item -Recurse -Force
+npm install -g @neosmithai/cli
+neosmith --version
+```
+
+> **`npm audit` reporting vulnerabilities?** Check whose they are before acting.
+> `@neosmithai/cli` ships two runtime dependencies (`smol-toml` and `yaml`), and a
+> clean global install audits **3 packages, 0 vulnerabilities**. A report citing
+> hundreds of packages is auditing a `package.json` that happens to live in that
+> directory, not this CLI. `npm ls @neosmithai/cli` shows you which tree the
+> advisories actually belong to.
+
+---
 
 ### The launcher isn't on my PATH
 

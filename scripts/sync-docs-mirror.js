@@ -56,6 +56,11 @@ function readConfigExcludes() {
   return excludes;
 }
 
+// Line endings are not content. See the compare below.
+function eol(text) {
+  return String(text).replace(/\r\n/g, "\n");
+}
+
 function rewriteLinks(text) {
   text = text.replace(/\]\(([^)]+?)\.md(#[^)]*)?\)/g, "]($1$2)");
   text = text.replace(
@@ -135,7 +140,12 @@ function main() {
     }
 
     const actual = fs.readFileSync(item.mirrorPath, "utf8");
-    if (actual !== expected) {
+    // Compare EOL-normalised. Git checks these out CRLF on Windows while the
+    // generated form is always LF, so a raw compare reported EVERY mirrored
+    // file as drifting on a Windows checkout — 16 of them, permanently, which
+    // is a signal nobody can act on and therefore nobody reads. generate-docs.js
+    // already normalises for exactly this reason; this did not.
+    if (eol(actual) !== eol(expected)) {
       drifting++;
       if (checkOnly) {
         console.error(`drift:         ${path.relative(MONOREPO_ROOT, item.mirrorPath)}`);

@@ -61,7 +61,7 @@ test("docs: packages/cli/README.md covers every top-level command the dispatcher
   // Mirror the dispatcher's top-level switch (bin/neosmith.js). Each must
   // appear in the canonical README so users discover it.
   const commands = ["login", "verify", "doctor", "setup", "reset", "status",
-    "uninstall", "models", "keys", "originals", "feedback", "help", "init"];
+    "uninstall", "models", "keys", "update", "originals", "feedback", "help", "init"];
   for (const c of commands) {
     assert.ok(text.includes(c),
       `packages/cli/README.md must mention command "neosmith ${c}" (routed by the dispatcher)`);
@@ -75,4 +75,63 @@ test("docs: packages/cli/README.md has no runnable `bash -c \"$(curl ... install
   assert.ok(!/bash\s+-c\s+"\$\(curl[^"]*install\.sh/.test(text),
     "packages/cli/README.md must not duplicate the runnable bash install command — " +
     "point at the root README instead (bug #6 regression guard).");
+});
+
+// 5. Customer-facing docs must name every harness in the manifest.
+//
+// Adding a harness used to mean remembering an unbounded list of prose files.
+// It did not get remembered: site/docs/agents/index.md still listed five agents
+// long after copilot, zed and cursor shipped in 0.3.0, and the docs-site landing
+// page was stuck at eight. The manifest-driven blocks (scripts/generate-docs.js)
+// are the fix; this is the gate that says the fix is still wired up.
+test("docs: every manifest harness is named in the customer-facing docs", () => {
+  const harness = require("../../lib/harness");
+  const SURFACES = [
+    ["site/README.md", "the docs-site landing table"],
+    ["site/COMPATIBILITY.md", "the compatibility matrix"],
+    ["site/docs/agents/index.md", "the Agents section index"],
+    ["packages/cli/README.md", "the npm page"],
+  ];
+  for (const [rel, what] of SURFACES) {
+    const text = fs.readFileSync(path.join(ROOT, rel), "utf8");
+    for (const h of harness.manifest().harnesses) {
+      const label = h.shortLabel || h.name;
+      assert.ok(text.includes(label),
+        `${rel} (${what}) does not mention "${label}". A harness a reader cannot ` +
+        `find is one they will never wire — regenerate with \`node scripts/generate-docs.js\` ` +
+        `if the table is manifest-driven, or add the prose if it is not.`);
+    }
+  }
+});
+
+// 6. Every harness's docPage must actually exist.
+test("docs: every manifest docPage resolves to a real file", () => {
+  const harness = require("../../lib/harness");
+  for (const h of harness.manifest().harnesses) {
+    const rel = (h.docPage || `agents/${h.id}.md`).replace(/^\.\//, "");
+    const full = path.join(ROOT, "site", rel);
+    assert.ok(fs.existsSync(full),
+      `manifest declares docPage "${rel}" for '${h.id}', but site/${rel} does not exist — ` +
+      `the generated tables link to it, so this ships a 404`);
+  }
+});
+
+// 7. The de-listed SKU must not be advertised as a supported option.
+//
+// harnesses.json records neosmith.intelligent-lite as DE-LISTED: the router
+// still routes it, but GET /v1/models no longer lists it and the real budget
+// tier is neosmith.neolite. The reference page advertised it in its SKU table
+// for months — a wrong answer a reader has no way to detect. The table is
+// generated from claudeTierMap now; this pins that it stays that way, on the
+// published mirror as well as the source.
+test("docs: the de-listed intelligent-lite SKU is not offered in the SKU tables", () => {
+  for (const rel of ["site/reference/endpoints.md", "site/docs/reference/endpoints.md"]) {
+    const text = fs.readFileSync(path.join(ROOT, rel), "utf8");
+    const block = text.split("<!-- BEGIN manifest:skus -->")[1];
+    assert.ok(block, `${rel} lost its manifest:skus marker block`);
+    const table = block.split("<!-- END manifest:skus -->")[0];
+    assert.ok(!table.includes("intelligent-lite"),
+      `${rel} still lists neosmith.intelligent-lite as a SKU; the budget tier is neosmith.neolite`);
+    assert.ok(table.includes("neosmith.neolite"), `${rel} must list the real budget tier`);
+  }
 });

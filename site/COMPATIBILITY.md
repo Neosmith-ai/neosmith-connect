@@ -39,6 +39,18 @@ A single-glance view of what works where. ✅ = supported and documented · ⚠�
 | **Cline** (standalone CLI) | ✅ terminal | ✅ terminal | ✅ terminal | ✅ terminal |
 | **Continue** | ✅ ext | ✅ plugin | ✅ ext | ⚠️ if extensible |
 | **JetBrains AI** | ❌ | ✅ | ❌ | ❌ |
+| **Copilot Chat** | ✅ ext | ❌ | ⚠️ fork-dependent | ⚠️ if extensible |
+| **OpenCode** (CLI) | ✅ terminal | ✅ terminal | ✅ terminal | ✅ terminal |
+| **OpenClaw** (gateway) | ✅ terminal | ✅ terminal | ✅ terminal | ✅ terminal |
+| **Junie CLI** | ✅ terminal | ✅ terminal | ✅ terminal | ✅ terminal |
+
+> **Zed** and **Cursor** are absent from this table on purpose: each is an editor
+> in its own right, not an agent hosted inside the four above. See
+> [agents/zed.md](agents/zed.md) and [ides/cursor.md](ides/cursor.md).
+>
+> **OpenClaw** is a self-hosted gateway rather than an in-editor agent — it fronts
+> coding agents from chat apps, so the IDE columns mean "the terminal you start it
+> from". See [agents/openclaw.md](agents/openclaw.md).
 
 ## Platforms (OS)
 

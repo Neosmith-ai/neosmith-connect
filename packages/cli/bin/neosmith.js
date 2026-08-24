@@ -9,6 +9,7 @@
 //   neosmith <harness> status
 //   neosmith status
 //   neosmith keys
+//   neosmith update
 //   neosmith originals
 //   neosmith verify
 //   neosmith uninstall
@@ -40,6 +41,7 @@ const commands = {
   uninstall: require("../lib/commands/uninstall"),
   models: require("../lib/commands/models"),
   keys: require("../lib/commands/keys"),
+  update: require("../lib/commands/update"),
   originals: require("../lib/commands/originals"),
   feedback: require("../lib/commands/feedback"),
   help: require("../lib/commands/help"),
@@ -114,6 +116,8 @@ async function main() {
     case "models":  return commands.models.run(args);
     case "keys": case "key":
       return commands.keys.run(args);
+    case "update": case "upgrade":
+      return commands.update.run(args);
     case "originals": case "backups":
       return commands.originals.run(args);
     case "feedback": case "issue": case "bug": case "idea":

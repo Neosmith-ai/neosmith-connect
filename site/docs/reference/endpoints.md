@@ -9,10 +9,12 @@ nav_order: 1
 
 ## Base Endpoints
 
+<!-- BEGIN manifest:endpoints -->
 | Endpoint | Format | Path examples | Used by |
 |---|---|---|---|
 | `https://router.neosmith.ai` | **Anthropic Messages API** | `/v1/messages` | Claude Code |
-| `https://router.neosmith.ai/v1` | **OpenAI API** | `/v1/chat/completions`, `/v1/responses`, `/v1/models` | Cline, Continue, JetBrains AI, Cursor, Codex |
+| `https://router.neosmith.ai/v1` | **OpenAI API** | `/v1/chat/completions`, `/v1/responses`, `/v1/models` | Codex, Continue, Cline, JetBrains AI, Copilot Chat, Zed, Cursor, OpenCode, OpenClaw, Junie CLI |
+<!-- END manifest:endpoints -->
 
 > **Important:** The OpenAI-format clients need the **`/v1`** suffix in the base URL. The Anthropic-format client (Claude Code) uses the **bare** host (it appends `/v1/messages` itself).
 
@@ -30,12 +32,14 @@ nav_order: 1
 
 NeoSmith exposes branded model SKUs. Set whichever your agent requires in its `model` field. Routing is automatic behind each SKU.
 
-| Model SKU | Tier | Behavior |
-|---|---|---|
-| `neosmith.intelligent-pro` | Opus-tier (**default**) | SLM-first, escalates to Claude Opus on hard tasks / verifier-fail |
-| `neosmith.intelligent-basic` | Sonnet-tier | SLM-first with Sonnet fallback; **no Opus** |
-| `neosmith.intelligent-lite` | Haiku/SLM-only | Lowest cost, SLM-only, no frontier escalation |
-| `neosmith.intelligent-maestro` | Highest-accuracy agentic coding | Fable-tier; top-of-ladder agentic lane |
+<!-- BEGIN manifest:skus -->
+| Model SKU | Tier | Context | Behaviour |
+|---|---|---|---|
+| `neosmith.intelligent-pro` | NeoSmith Pro (**default**) | 1M | Cost-optimised with Opus escalation |
+| `neosmith.intelligent-basic` | NeoSmith Basic | 1M | Cost-optimised with Sonnet ceiling |
+| `neosmith.neolite` | NeoSmith NeoLite | 512K | Sealed budget tier · 512K · cheapest |
+| `neosmith.intelligent-maestro` | NeoSmith Maestro | 1M | Highest-accuracy agentic coding |
+<!-- END manifest:skus -->
 
 > Anthropic-style model ids (e.g. `claude-opus-4`) are also accepted for Claude Code compatibility and map to the `intelligent-pro` tier. Unknown model names (e.g. `gpt-4o`) are **rejected** with HTTP 400.
 
