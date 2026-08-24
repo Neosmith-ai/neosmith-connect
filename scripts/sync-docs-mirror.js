@@ -157,9 +157,48 @@ function main() {
     }
   }
 
-  if (checkOnly && (drifting > 0 || missing > 0)) {
-    console.error(`\nDrift detected: ${drifting} drifting, ${missing} missing.`);
+  // MISSING and DRIFTING are different failures and deserve different verdicts.
+  //
+  // A mirror that has drifted still publishes; it just publishes something
+  // slightly older than site/. That is the hand-edited content this script's
+  // header describes, and failing on it would mean failing forever.
+  //
+  // A mirror that is MISSING does not publish at all. site/docs/ is the Jekyll
+  // source root — a page with no mirror is written, reviewed, merged, and then
+  // silently absent from the site. That is exactly how agents/copilot.md and
+  // agents/zed.md served 404s from 0.3.0 onward while every generated table
+  // linked to them. So `missing` fails, always, and is never waived.
+  //
+  // Drift is ratcheted instead: --max-drift N fails if the count grows past a
+  // committed baseline. It cannot be fixed in one go, but it cannot get worse.
+  const maxDriftArg = process.argv.find((a) => a.startsWith("--max-drift="));
+  const maxDrift = maxDriftArg ? parseInt(maxDriftArg.split("=")[1], 10) : Infinity;
+
+  console.log(`\n${drifting} drifting, ${missing} missing.`);
+
+  if (missing > 0) {
+    console.error(
+      `\nERROR: ${missing} source page(s) have no mirror under site/docs/.\n` +
+      `  site/docs/ is what Jekyll builds and GitHub Pages serves, so a page with no\n` +
+      `  mirror is written but never published — a 404 behind every link to it.\n` +
+      `  Create the mirror (front matter + link-rewritten body) and commit it.`,
+    );
     process.exitCode = 1;
+    return;
+  }
+
+  if (drifting > maxDrift) {
+    console.error(
+      `\nERROR: mirror drift grew to ${drifting}, above the agreed ceiling of ${maxDrift}.\n` +
+      `  Bring the new one back in sync, or raise the ceiling deliberately in\n` +
+      `  .github/workflows/pages.yml if the drift is intentional hand-edited content.`,
+    );
+    process.exitCode = 1;
+    return;
+  }
+
+  if (checkOnly && drifting > 0) {
+    console.log(`(within the agreed ceiling of ${maxDrift === Infinity ? "unlimited" : maxDrift})`);
   }
 }
 

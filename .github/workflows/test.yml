@@ -58,6 +58,16 @@ jobs:
       - name: Verify manifest-driven docs match the manifest
         run: node scripts/generate-docs.js --check
 
+      - name: Verify every source page is mirrored into site/docs/
+        # site/docs/ is what Jekyll builds and Pages serves. A page with no
+        # mirror is written, reviewed, merged — and then absent from the live
+        # site, with every link to it a 404. Caught here rather than at deploy,
+        # so the PR that introduces it is the PR that fails.
+        #
+        # Drift is ratcheted, not failed on: the mirror carries hand-edited
+        # content by design. See scripts/sync-docs-mirror.js.
+        run: node scripts/sync-docs-mirror.js --check --max-drift=15
+
       # Drives the e2e driver over all 8 harnesses against the offline contract
       # mock: no secrets, no network, no cost. Proves run.js works on every OS
       # before the paid staging workflow depends on it — a bug in the driver

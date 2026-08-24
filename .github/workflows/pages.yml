@@ -42,13 +42,20 @@ jobs:
         # mean a harness was added to harnesses.json but the generator wasn't
         # re-run.
         run: node scripts/generate-docs.js --check
-      - name: Report Jekyll mirror drift (informational only)
-        # The mirror at site/docs/ has substantial hand-edited content beyond
-        # what an automated re-generation can reproduce. Drift here is reported
-        # but does not fail the build — see scripts/sync-docs-mirror.js for
-        # the rationale. A future enhancement will produce side-by-side
-        # `.next` files for hand merging.
-        run: node scripts/sync-docs-mirror.js || true
+      - name: Jekyll mirror — missing pages fail, drift is ratcheted
+        # Two different failures, two different verdicts.
+        #
+        # MISSING is fatal. site/docs/ is the directory Jekyll builds, so a
+        # source page with no mirror is never published — every link to it is a
+        # 404. agents/copilot.md and agents/zed.md did exactly that from 0.3.0
+        # until it was noticed by hand.
+        #
+        # DRIFT is ratcheted, not fixed. The mirror carries hand-edited content
+        # an automated re-generation cannot reproduce (see the script header),
+        # so failing on any drift would fail forever. --max-drift fails only if
+        # the count GROWS. Lower the ceiling as pages are brought back in sync;
+        # raise it only deliberately, in a commit that says why.
+        run: node scripts/sync-docs-mirror.js --check --max-drift=15
 
       - uses: ruby/setup-ruby@v1
         with:
@@ -69,9 +76,37 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    # Exposed so verify-published can ask the URL this run actually deployed to,
+    # rather than a hardcoded guess that goes stale if the repo is ever renamed.
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+  # Everything above inspects the REPOSITORY. None of it proves a page came out
+  # the other end — which is why two harness pages could 404 on the live guide
+  # for months while every in-repo check stayed green. This asks the site.
+  verify-published:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - name: Every manifest harness has a live page
+        # Pages serves from a CDN, so a fresh deploy can take a moment to
+        # propagate. Retry before calling it a failure.
+        run: |
+          for attempt in 1 2 3; do
+            if node scripts/check-published-docs.js --base "${{ needs.deploy.outputs.page_url || 'https://neosmith-ai.github.io/neosmith-connect' }}"; then
+              exit 0
+            fi
+            echo "attempt $attempt failed; waiting for the CDN…"
+            sleep 20
+          done
+          echo '::error::Published docs are missing pages the manifest declares'
+          exit 1

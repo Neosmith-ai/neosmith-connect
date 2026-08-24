@@ -135,3 +135,42 @@ test("docs: the de-listed intelligent-lite SKU is not offered in the SKU tables"
     assert.ok(table.includes("neosmith.neolite"), `${rel} must list the real budget tier`);
   }
 });
+
+// 8. Every harness page must exist in the MIRROR, not just in site/.
+//
+// site/docs/ is the Jekyll source root — it is what gets built and what GitHub
+// Pages serves. site/ is the authoring copy. A page that exists in one and not
+// the other is written, reviewed, merged, and then absent from the live site,
+// with every generated table linking to a 404.
+//
+// That is not hypothetical: agents/copilot.md and agents/zed.md were declared in
+// the manifest from 0.3.0 and served 404 on the published guide until the check
+// below was written. Test 6 (docPage resolves) would not have caught it — the
+// source pages were the ones missing there, and once they existed the mirror
+// still was not.
+test("docs: every manifest docPage is mirrored into site/docs/ so it publishes", () => {
+  const harness = require("../../lib/harness");
+  for (const h of harness.manifest().harnesses) {
+    const rel = (h.docPage || `agents/${h.id}.md`).replace(/^\.\//, "");
+    const mirror = path.join(ROOT, "site", "docs", rel);
+    assert.ok(fs.existsSync(mirror),
+      `site/docs/${rel} does not exist, so '${h.id}' will not appear on the published site ` +
+      `even though every generated table links to it. site/docs/ is what Jekyll builds.`);
+  }
+});
+
+// 9. A mirrored page must carry the Jekyll front matter, or it renders raw.
+test("docs: every mirrored harness page has usable Jekyll front matter", () => {
+  const harness = require("../../lib/harness");
+  for (const h of harness.manifest().harnesses) {
+    const rel = (h.docPage || `agents/${h.id}.md`).replace(/^\.\//, "");
+    const mirror = path.join(ROOT, "site", "docs", rel);
+    if (!fs.existsSync(mirror)) continue; // test 8 owns that failure
+    const head = fs.readFileSync(mirror, "utf8").split("---")[1] || "";
+    for (const key of ["title:", "layout:", "parent:", "nav_order:"]) {
+      assert.ok(head.includes(key),
+        `site/docs/${rel} front matter has no ${key} — Just-the-Docs needs it to place the ` +
+        `page in the nav; without it the page builds but nobody can find it`);
+    }
+  }
+});
