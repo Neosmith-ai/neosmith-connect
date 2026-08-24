@@ -32,7 +32,8 @@ const path = require("node:path");
 
 const { withSandbox } = require("./_sandbox");
 
-const HARNESS_MODULES = ["claude", "cline", "codex", "continue", "copilot", "cursor", "jetbrains", "zed"];
+const HARNESS_MODULES = ["claude", "cline", "codex", "continue", "copilot", "cursor", "jetbrains", "zed",
+  "opencode", "openclaw", "junie"];
 
 // Re-require everything so io.js picks up the sandbox HOME. The registry caches
 // loaded modules, so every harness module must be evicted, not just the one
@@ -220,6 +221,120 @@ const WRITABLE = {
       const c = JSON.parse(text);
       assert.ok(!c.some((v) => v.name === "NeoSmith"), "NeoSmith provider removed");
       assert.equal(c.length, 1, "only the user's provider remains");
+    },
+  },
+
+  // OpenCode merges every config source it finds rather than replacing, so its
+  // opencode.json is very often the user's ONLY hand-written one — theme,
+  // keybinds, agents, their own providers. `on` adds provider.neosmith and
+  // re-points model/small_model; nothing else in the document is in scope.
+  opencode: {
+    seed: () => JSON.stringify({
+      $schema: "https://opencode.ai/config.json",
+      theme: "tokyonight",
+      model: "anthropic/claude-sonnet-4-5",
+      provider: {
+        myown: {
+          npm: "@ai-sdk/openai-compatible",
+          options: { baseURL: "https://example.com/v1", apiKey: "user-owned-key" },
+        },
+      },
+    }, null, 2) + "\n",
+    userSurvives(t, text) {
+      const c = JSON.parse(text);
+      assert.equal(c.theme, "tokyonight", `${t}: unrelated settings must survive`);
+      assert.equal(c.$schema, "https://opencode.ai/config.json", `${t}: the schema pointer must survive`);
+      assert.equal(c.provider.myown.options.apiKey, "user-owned-key",
+        `${t}: the user's own provider must survive untouched`);
+    },
+    neoPresent(text) {
+      const c = JSON.parse(text);
+      assert.equal(c.provider.neosmith.npm, "@ai-sdk/openai-compatible");
+      assert.equal(c.provider.neosmith.options.baseURL, "https://router.neosmith.ai/v1");
+      assert.equal(c.provider.neosmith.options.apiKey, KEY);
+      assert.equal(c.model, "neosmith/neosmith.intelligent-pro");
+      assert.equal(c.small_model, "neosmith/neosmith.neolite");
+    },
+    neoGone(text) {
+      const c = JSON.parse(text);
+      assert.ok(!c.provider.neosmith, "NeoSmith provider removed");
+      assert.ok(c.provider.myown, "the user's provider is still there");
+      assert.equal(c.model, "anthropic/claude-sonnet-4-5", "user's model restored, not deleted");
+      assert.ok(!("small_model" in c), "a small_model NeoSmith introduced is removed");
+    },
+  },
+
+  // OpenClaw refuses to start on a config that does not match its schema, so
+  // the thing to pin here is that `on` touches models.providers.neosmith and
+  // agents.defaults.model.primary and NOTHING else — not the channels block,
+  // not the user's other agent defaults, not their other providers.
+  openclaw: {
+    seed: () => JSON.stringify({
+      channels: { slack: { allowFrom: ["U1"] } },
+      agents: { defaults: { model: { primary: "anthropic/claude-opus-4-6" }, maxTurns: 12 } },
+      models: {
+        providers: {
+          myown: { baseUrl: "https://example.com/v1", apiKey: "user-owned-key", api: "openai-completions" },
+        },
+      },
+    }, null, 2) + "\n",
+    userSurvives(t, text) {
+      const c = JSON.parse(text);
+      assert.deepEqual(c.channels.slack.allowFrom, ["U1"], `${t}: the channels block must survive`);
+      assert.equal(c.agents.defaults.maxTurns, 12, `${t}: other agent defaults must survive`);
+      assert.equal(c.models.providers.myown.apiKey, "user-owned-key",
+        `${t}: the user's own provider must survive untouched`);
+    },
+    neoPresent(text) {
+      const c = JSON.parse(text);
+      const p = c.models.providers.neosmith;
+      assert.equal(p.baseUrl, "https://router.neosmith.ai/v1");
+      assert.equal(p.apiKey, KEY);
+      assert.equal(p.api, "openai-completions");
+      assert.equal(c.agents.defaults.model.primary, "neosmith/neosmith.intelligent-pro");
+      // The gateway refuses to start on unknown keys, so the written block
+      // must carry the documented set and nothing else.
+      assert.deepEqual(Object.keys(p).sort(), ["api", "apiKey", "baseUrl", "models"]);
+    },
+    neoGone(text) {
+      const c = JSON.parse(text);
+      assert.ok(!c.models.providers.neosmith, "NeoSmith provider removed");
+      assert.ok(c.models.providers.myown, "the user's provider is still there");
+      assert.equal(c.agents.defaults.model.primary, "anthropic/claude-opus-4-6",
+        "user's default model restored, not deleted");
+    },
+  },
+
+  // Junie's profile file is named after us, so there is no shared document to
+  // merge into — but a user can still hand-tune fields ON our profile, and a
+  // second `on` to switch tiers must not throw those away.
+  junie: {
+    seed: () => JSON.stringify({
+      temperature: 0.2,
+      extraHeaders: { "X-Mine": "keep-me" },
+      maxContextLength: 4096,
+    }, null, 2) + "\n",
+    userSurvives(t, text) {
+      const c = JSON.parse(text);
+      assert.equal(c.temperature, 0.2, `${t}: a field NeoSmith does not own must survive`);
+      assert.equal(c.extraHeaders["X-Mine"], "keep-me", `${t}: user headers must survive`);
+    },
+    neoPresent(text) {
+      const c = JSON.parse(text);
+      assert.equal(c.apiType, "OpenAICompletion");
+      assert.equal(c.apiKey, KEY);
+      assert.equal(c.id, "neosmith.intelligent-pro");
+      // Junie wants the FULL endpoint, not the /v1 root. Every other harness
+      // in this repo writes the base; this is the one that appends a path.
+      assert.equal(c.baseUrl, "https://router.neosmith.ai/v1/chat/completions");
+    },
+    neoGone(text) {
+      const c = JSON.parse(text);
+      assert.ok(!c.apiKey, "apiKey removed");
+      assert.ok(!c.baseUrl, "baseUrl removed");
+      assert.ok(!c.apiType, "apiType removed");
+      assert.equal(c.maxContextLength, 4096, "user's own maxContextLength restored, not deleted");
+      assert.equal(c.temperature, 0.2, "user's own field still there");
     },
   },
 };

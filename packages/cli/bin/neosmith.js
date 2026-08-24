@@ -8,12 +8,14 @@
 //   neosmith <harness> off
 //   neosmith <harness> status
 //   neosmith status
+//   neosmith keys
 //   neosmith originals
 //   neosmith verify
 //   neosmith uninstall
 //   neosmith help [harness]
 //
-// Harnesses: claude · codex · continue · cline · jetbrains
+// Harnesses: claude · codex · continue · cline · jetbrains · copilot · zed ·
+//            cursor · opencode · openclaw · junie
 //
 // Back-compat: `neosmith init <key>` is preserved — it logs in then connects
 // Claude Code, matching the original one-liner documented in the developer guide.
@@ -37,6 +39,7 @@ const commands = {
   reset: require("../lib/commands/reset"),
   uninstall: require("../lib/commands/uninstall"),
   models: require("../lib/commands/models"),
+  keys: require("../lib/commands/keys"),
   originals: require("../lib/commands/originals"),
   feedback: require("../lib/commands/feedback"),
   help: require("../lib/commands/help"),
@@ -109,6 +112,8 @@ async function main() {
     case "status":  return commands.status.run(args);
     case "uninstall": return commands.uninstall.run(args);
     case "models":  return commands.models.run(args);
+    case "keys": case "key":
+      return commands.keys.run(args);
     case "originals": case "backups":
       return commands.originals.run(args);
     case "feedback": case "issue": case "bug": case "idea":

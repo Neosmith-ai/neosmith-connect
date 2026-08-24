@@ -547,12 +547,24 @@ function help() {
   ].join("\n");
 }
 
+// Which key Claude Code is holding, for `neosmith keys`. `on` writes the key
+// into env.ANTHROPIC_AUTH_TOKEN (the canonical NeoSmith var per the developer
+// guide), so that is the one slot to read — not ANTHROPIC_API_KEY, which may
+// hold a first-party Anthropic key the user owns.
+function keyRef() {
+  if (!io.fileExists(CONFIG)) return null;
+  const cfg = io.readJSON(CONFIG) || {};
+  const value = cfg.env && cfg.env.ANTHROPIC_AUTH_TOKEN;
+  if (typeof value !== "string" || !value) return null;
+  return { kind: "literal", value, file: CONFIG };
+}
+
 module.exports = {
   id: "claude",
   name: "Claude Code",
   writable: true,
   configFile: CONFIG,
-  on, off, status, help,
+  on, off, status, help, keyRef,
   // Exposed so the smoke rehearsal targets the same per-OS paths the harness
   // writes to, instead of keeping its own (Windows-only) copy of the logic.
   EDITORS, editorSettingsPath,

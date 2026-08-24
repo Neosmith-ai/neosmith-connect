@@ -281,3 +281,63 @@ test("the audit log records which environment each write targeted", () => {
   // The environment name is not a secret, but the key still must not appear.
   assert.ok(!lines.some((e) => JSON.stringify(e).includes(KEY)), "audit must never contain key material");
 });
+
+// --- the 0.10.0 harnesses ---------------------------------------------------
+// Every one of these writes harness.OPENAI_BASE_URL, so --env has to reach all
+// three. Junie is the one that needs its own assertion rather than a shared
+// loop: it writes the FULL endpoint, not the /v1 root.
+
+test("opencode/openclaw on --env staging write the staging base URL", () => {
+  for (const [id, file, readBase] of [
+    ["opencode", [".config", "opencode", "opencode.json"],
+      (c) => c.provider.neosmith.options.baseURL],
+    ["openclaw", [".openclaw", "openclaw.json"],
+      (c) => c.models.providers.neosmith.baseUrl],
+  ]) {
+    const home = fresh();
+    const r = run(["--env", "staging", id, "on"], home);
+    assert.equal(r.status, 0, r.all);
+    const cfg = JSON.parse(fs.readFileSync(path.join(home, ...file), "utf8"));
+    assert.equal(readBase(cfg), `${STAGING}/v1`, `${id}: --env must reach the written base URL`);
+    assert.ok(!JSON.stringify(cfg).includes(`${PROD}/v1`), `${id}: no prod URL may survive`);
+  }
+});
+
+test("junie on --env staging writes the staging FULL endpoint", () => {
+  const home = fresh();
+  const r = run(["--env", "staging", "junie", "on"], home);
+  assert.equal(r.status, 0, r.all);
+  const p = JSON.parse(fs.readFileSync(path.join(home, ".junie", "models", "neosmith.json"), "utf8"));
+  assert.equal(p.baseUrl, `${STAGING}/v1/chat/completions`,
+    "Junie takes the full endpoint — the /v1 root would 404, on staging as on prod");
+});
+
+test("off removes staging wiring from the 0.10.0 harnesses without --env", () => {
+  for (const [id, file] of [
+    ["opencode", [".config", "opencode", "opencode.json"]],
+    ["openclaw", [".openclaw", "openclaw.json"]],
+    ["junie", [".junie", "models", "neosmith.json"]],
+  ]) {
+    const home = fresh();
+    assert.equal(run(["--env", "staging", id, "on"], home).status, 0);
+    assert.ok(fs.existsSync(path.join(home, ...file)), `${id}: on must have written something`);
+
+    // No --env: the user disconnects the way they always would. Ownership
+    // matches ANY known environment, so this has to find the staging wiring.
+    const off = run([id, "off"], home);
+    assert.equal(off.status, 0, off.all);
+    assert.ok(!fs.existsSync(path.join(home, ...file)),
+      `${id}: off must remove the staging wiring, not leave the user silently on staging`);
+  }
+});
+
+test("status flags a prod/staging mismatch for the 0.10.0 harnesses", () => {
+  for (const id of ["opencode", "openclaw", "junie"]) {
+    const home = fresh();
+    assert.equal(run([id, "on"], home).status, 0);          // wired to prod
+    const r = run(["--env", "staging", "status"], home);     // viewed as staging
+    assert.equal(r.status, 0, r.all);
+    assert.match(r.all, /on\(prod\)/, `${id}: the tag names the environment on disk`);
+    assert.match(r.all, /wired to prod, but --env staging is active/, `${id}: the mismatch must be called out`);
+  }
+});

@@ -1,3 +1,10 @@
+---
+title: OpenCode
+layout: default
+parent: Agents
+nav_order: 8
+---
+
 # OpenCode + NeoSmith
 
 OpenCode is a terminal-first coding agent. It supports custom OpenAI-compatible providers, so it points at NeoSmith directly.
@@ -101,4 +108,4 @@ To confirm the traffic routed through NeoSmith, curl `/whoami` with your key (se
 - **Context compacts far too early:** `limit.context` is missing from the model entry. Re-run `neosmith opencode on`, which registers all four SKUs with their real windows.
 - **`on` printed a block instead of writing:** your config is `.jsonc` with comments or trailing commas. See [The JSONC caveat](#the-jsonc-caveat) above.
 - **Edited the config and nothing changed:** a project-level `opencode.json` outranks the global one. Check for one in your repo root.
-- More: [reference/troubleshooting.md](../reference/troubleshooting.md)
+- More: [reference/troubleshooting.md](../reference/troubleshooting)

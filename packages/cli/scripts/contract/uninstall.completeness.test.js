@@ -23,6 +23,8 @@
 
 const test = require("node:test");
 const assert = require("node:assert");
+const fs = require("node:fs");
+const path = require("node:path");
 
 const { withSandbox } = require("./_sandbox");
 
@@ -148,4 +150,134 @@ test("uninstall: nothing wired means nothing to warn about", () => withSandbox((
     assert.deepEqual(uninstall.survivingHarnesses(), [],
       "the normal path must stay quiet — a warning that always fires is one nobody reads");
   });
+}));
+
+// ── 4. a global install the running copy cannot see ─────────────────────────
+//
+// The npm-detection above keys on __dirname: it settles which copy is
+// EXECUTING. That is only half the question. Run `node bin/neosmith.js
+// uninstall` from a checkout — or the installer's copy under ~/.neosmith/cli —
+// on a machine that also has `npm i -g @neosmithai/cli`, and __dirname says
+// nothing about npm. uninstall fell through to a dim conditional footnote and
+// printed "Done." while `neosmith` was still on PATH. Reported from the field.
+//
+// The machine can just be looked at, so these pin that it is.
+
+function fakeGlobalInstall(home, rel) {
+  const dir = path.join(home, ...rel, "node_modules", "@neosmithai", "cli");
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify({ name: "@neosmithai/cli" }));
+  return dir.split(path.sep).join("/");
+}
+
+function withPrefix(prefix, fn) {
+  const saved = process.env.npm_config_prefix;
+  process.env.npm_config_prefix = prefix;
+  try { return fn(); } finally {
+    if (saved === undefined) delete process.env.npm_config_prefix;
+    else process.env.npm_config_prefix = saved;
+  }
+}
+
+test("uninstall: a global install is found via npm's prefix, whichever copy is running", () => withSandbox((home) => {
+  const { uninstall } = loadUninstall();
+  const dir = fakeGlobalInstall(home, ["npm-prefix"]);
+  withPrefix(path.join(home, "npm-prefix"), () => {
+    assert.deepEqual(uninstall.globalNpmInstalls(), [dir],
+      "npm_config_prefix is the authoritative answer when npm or the user has set it");
+  });
+}));
+
+test("uninstall: the POSIX <prefix>/lib/node_modules layout is found too", () => withSandbox((home) => {
+  const { uninstall } = loadUninstall();
+  const dir = fakeGlobalInstall(home, ["npm-prefix", "lib"]);
+  withPrefix(path.join(home, "npm-prefix"), () => {
+    assert.deepEqual(uninstall.globalNpmInstalls(), [dir]);
+  });
+}));
+
+test("uninstall: a prefix with nothing installed yields nothing", () => withSandbox((home) => {
+  const { uninstall } = loadUninstall();
+  fs.mkdirSync(path.join(home, "npm-prefix"), { recursive: true });
+  withPrefix(path.join(home, "npm-prefix"), () => {
+    assert.deepEqual(uninstall.globalNpmInstalls().filter((g) => g.includes("npm-prefix")), [],
+      "a directory without a package.json is not an install");
+  });
+}));
+
+// ── reportNpmInstall's three branches ───────────────────────────────────────
+// `running` is injected: __dirname cannot be faked, and the branch that must
+// NOT offer to self-remove is exactly the one worth pinning.
+
+test("uninstall: run from a checkout with a global present, npm removal is offered", () => withSandbox(async () => {
+  const { uninstall } = loadUninstall();
+  let asked = 0;
+  const left = await uninstall.reportNpmInstall({
+    running: null,                                   // a checkout: not an npm copy
+    globals: ["/somewhere/npm/node_modules/@neosmithai/cli"],
+    confirm: async () => { asked++; return false; },
+  });
+  assert.equal(asked, 1, "there is no self-deletion hazard here, so it must offer");
+  assert.ok(left, "declining leaves it installed — the caller must not print 'Done.'");
+}));
+
+test("uninstall: the copy you are RUNNING is never handed to npm to delete", () => withSandbox(async () => {
+  const { uninstall } = loadUninstall();
+  const self = "/users/me/appdata/roaming/npm/node_modules/@neosmithai/cli";
+  let asked = 0;
+  const left = await uninstall.reportNpmInstall({
+    running: self,
+    globals: [self],
+    confirm: async () => { asked++; return true; },
+  });
+  assert.equal(asked, 0,
+    "deleting the tree a live process was loaded from fails outright on Windows — it can only be reported");
+  assert.equal(left, self, "and it is still installed, so 'Done.' would be a lie");
+}));
+
+test("uninstall: a second global copy IS offered even while running one of them", () => withSandbox(async () => {
+  const { uninstall } = loadUninstall();
+  const self = "/users/me/appdata/roaming/npm/node_modules/@neosmithai/cli";
+  const other = "/usr/local/lib/node_modules/@neosmithai/cli";
+  let asked = 0;
+  await uninstall.reportNpmInstall({
+    running: self,
+    globals: [self, other],
+    confirm: async () => { asked++; return false; },
+  });
+  assert.equal(asked, 1, "the copy that is not executing has no self-deletion hazard");
+}));
+
+test("uninstall: nothing npm-installed prints no conditional footnote at all", () => withSandbox(async () => {
+  const { uninstall } = loadUninstall();
+  const lines = [];
+  const origLog = console.log, origErr = console.error;
+  console.log = (...a) => lines.push(a.join(" "));
+  console.error = (...a) => lines.push(a.join(" "));
+  let left;
+  try {
+    left = await uninstall.reportNpmInstall({ running: null, globals: [], confirm: async () => true });
+  } finally { console.log = origLog; console.error = origErr; }
+
+  assert.equal(left, null, "nothing left → the caller may say 'Done.'");
+  assert.ok(!lines.join("\n").includes("npm uninstall -g"),
+    "the old 'If you also installed via npm…' footnote fired on every run; a warning that " +
+    "always fires is one nobody reads, and it was wrong precisely when it mattered");
+}));
+
+test("uninstall: --yes / --all do not spawn npm under --dry-run", () => withSandbox(async () => {
+  const { uninstall } = loadUninstall();
+  const saved = process.env.NEOSMITH_DRY_RUN;
+  process.env.NEOSMITH_DRY_RUN = "1";
+  try {
+    const left = await uninstall.reportNpmInstall({
+      running: null,
+      globals: ["/somewhere/npm/node_modules/@neosmithai/cli"],
+      confirm: async () => true,
+    });
+    assert.ok(left, "a dry run reports what it would do and removes nothing");
+  } finally {
+    if (saved === undefined) delete process.env.NEOSMITH_DRY_RUN;
+    else process.env.NEOSMITH_DRY_RUN = saved;
+  }
 }));

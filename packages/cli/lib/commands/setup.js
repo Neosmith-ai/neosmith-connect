@@ -25,10 +25,35 @@ const key = require("../key");
 // Two strategies: (1) configFile parent dir exists; (2) fallback paths beyond
 // the manifest's configFile (e.g. for UI-driven harnesses that pick from
 // multiple IDE roots).
+// The generic probe: take the directory the manifest's configFile sits in and
+// look for it under HOME. Only valid when the manifest path is exactly
+// `~/<dir>/<file>`, which is where it lands for ~/.claude, ~/.codex,
+// ~/.continue and ~/.openclaw.
+//
+// It used to be applied unconditionally, as
+// `basename(dirname(configFile))` joined to HOME, and for anything deeper that
+// produces a directory the tool never uses:
+//
+//   ~/.config/opencode/opencode.json   → ~/opencode
+//   ~/.junie/models/neosmith.json      → ~/models
+//   ~/.cline/data/settings/…json       → ~/settings
+//   ~/.config/zed/settings.json        → ~/zed
+//
+// Two ways that hurts. Usually the directory does not exist, the harness is
+// never detected, and `setup` silently never offers it — a failure with no
+// symptom. Occasionally it DOES exist for an unrelated reason (a ~/opencode
+// source checkout, a ~/models folder) and `setup` offers to wire a tool that is
+// not installed. Harnesses whose config is deeper than one level declare an
+// explicit probe below.
+function genericProbe(configFile) {
+  const m = /^~[\\/]([^\\/]+)[\\/][^\\/]+$/.exec(String(configFile || ""));
+  return m ? [path.join(io.HOME, m[1])] : [];
+}
+
 function harnessInstallPaths(manifestEntry) {
   const paths = [];
   if (manifestEntry.configFile) {
-    paths.push(path.join(io.HOME, path.basename(path.dirname(manifestEntry.configFile))));
+    paths.push(...genericProbe(manifestEntry.configFile));
   }
   // OS-specific install probes for code-driven harnesses.
   if (manifestEntry.id === "claude") {
@@ -58,6 +83,28 @@ function harnessInstallPaths(manifestEntry) {
     if (process.platform === "win32") paths.push(path.join(process.env.APPDATA || "", "JetBrains"));
     else if (process.platform === "darwin") paths.push(path.join(io.HOME, "Library", "Application Support", "JetBrains"));
     else paths.push(path.join(io.HOME, ".config", "JetBrains"));
+  } else if (manifestEntry.id === "zed") {
+    // Zed's settings dir is per-OS, and the manifest records only the Linux
+    // form — so this is the only probe that can be right on macOS or Windows.
+    if (process.platform === "win32") paths.push(path.join(process.env.APPDATA || "", "Zed"));
+    else if (process.platform === "darwin") paths.push(path.join(io.HOME, "Library", "Application Support", "Zed"));
+    else paths.push(path.join(io.HOME, ".config", "zed"));
+  } else if (manifestEntry.id === "opencode") {
+    // The generic probe above takes basename(dirname(configFile)) and joins it
+    // to HOME, which turns ~/.config/opencode/opencode.json into ~/opencode —
+    // a directory that never exists. OpenCode uses the same ~/.config layout on
+    // every platform, Windows included.
+    paths.push(path.join(io.HOME, ".config", "opencode"));
+    // The data dir holds auth.json and the project store, so it is present even
+    // for a user who authenticated with `/connect` and never wrote a config.
+    paths.push(path.join(io.HOME, ".local", "share", "opencode"));
+  } else if (manifestEntry.id === "openclaw") {
+    paths.push(path.join(io.HOME, ".openclaw"));
+  } else if (manifestEntry.id === "junie") {
+    // Same generic-probe problem: configFile is ~/.junie/models/<profile>.json,
+    // so basename(dirname(...)) is "models" and the probe lands on ~/models.
+    // JUNIE_HOME relocates the whole tree.
+    paths.push((process.env.JUNIE_HOME || "").trim() || path.join(io.HOME, ".junie"));
   }
   return paths.filter((p) => { try { return fs.existsSync(p); } catch { return false; } });
 }
@@ -151,4 +198,9 @@ async function run(args) {
   }
 }
 
-module.exports = { run };
+// harnessInstallPaths / isInstalled are exported for the contract suite. The
+// generic probe silently resolves some manifest paths to directories that can
+// never exist (see the opencode/junie branches above), and a harness that is
+// never detected is a harness `setup` never offers — a failure with no visible
+// symptom unless something asserts on it.
+module.exports = { run, harnessInstallPaths, isInstalled };

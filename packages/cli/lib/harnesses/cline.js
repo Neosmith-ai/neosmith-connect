@@ -274,11 +274,23 @@ function help() {
   ].join("\n");
 }
 
+// Which key Cline is holding, for `neosmith keys`. Guarded on ownership: the
+// `openai-compatible` provider block can equally hold a user's own third-party
+// key, and that is not ours to print.
+function keyRef() {
+  if (!io.fileExists(CONFIG)) return null;
+  const cfg = io.readJSON(CONFIG) || {};
+  if (!hasNeoSmith(cfg)) return null;
+  const value = providerBlock(cfg).settings.apiKey;
+  if (typeof value !== "string" || !value) return null;
+  return { kind: "literal", value, file: CONFIG };
+}
+
 module.exports = {
   id: "cline",
   name: "Cline",
   writable: true,
   configFile: CONFIG,
   modelsFile: MODELS_CONFIG,
-  on, off, status, help,
+  on, off, status, help, keyRef,
 };

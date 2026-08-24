@@ -34,7 +34,7 @@ npx @neosmithai/cli login sk-plus-yourname-xxxxxx
 
   Next steps:
     1. neosmith login            # paste your sk-plus-* / sk-std-* / sk-slm-* key
-    2. neosmith claude on        # wire Claude Code (or: codex, continue, cline, jetbrains, …)
+    2. neosmith claude on        # wire Claude Code (or: codex, continue, cline, opencode, junie, …)
     3. neosmith claude status    # confirm it's connected
 ```
 
@@ -60,7 +60,7 @@ neosmith login        # paste an sk-plus-* / sk-std-* / sk-slm-* key (or a Cogni
     cap:  3 of 30 days used this cycle
 
   Next: connect a harness — e.g. neosmith claude on
-  Supported: claude, codex, continue, cline, jetbrains. Run `neosmith help` for all.
+  Supported: claude, codex, continue, cline, jetbrains, copilot, zed, cursor, opencode, openclaw, junie. Run `neosmith help` for all.
 ```
 
 What this did: saved your key to `~/.neosmith/config.json` (mode `0600`, visible only to your user account) and round-tripped it against the router's `/whoami` so we know it actually works — not just that it's shaped right.
@@ -76,7 +76,7 @@ neosmith claude on      # Claude Code
 Restart Claude Code for the change to take effect.
 ```
 
-Swap `claude` for any harness: `codex`, `continue`, `cline`, `jetbrains`, `copilot`, `zed`, `cursor`. For the UI-driven ones (`jetbrains`, `cursor`), `on` prints the exact values to paste into the tool's settings — see [UI-driven harnesses](#ui-driven-harnesses-copilot-jetbrains-cursor) below.
+Swap `claude` for any harness: `codex`, `continue`, `cline`, `jetbrains`, `copilot`, `zed`, `cursor`, `opencode`, `openclaw`, `junie`. For the UI-driven ones (`jetbrains`, `cursor`), `on` prints the exact values to paste into the tool's settings — see [UI-driven harnesses](#ui-driven-harnesses-copilot-jetbrains-cursor) below.
 
 **Now fully quit and reopen the tool** — it only reads the new config on a fresh session.
 
@@ -115,6 +115,7 @@ If a harness shows `pass`, you're done. Open the tool, send any prompt, and you 
 | `neosmith <harness> off` | Restore a harness's pre-connect config, keeping any edits you made while connected. |
 | `neosmith <harness> status` | Show one harness's on/off state + model. |
 | `neosmith status` | Show all harnesses + stored key, and which of your settings files are backed up. |
+| `neosmith keys [--reveal] [--json]` | Reprint the keys this machine is configured with, per environment, and say which harness is holding which. Masked by default. |
 | `neosmith originals [--show <harness>] [--export <dir>] [--json]` | Show where your pre-connect settings are stored, read one, or copy them all out. |
 | `neosmith verify` | Hit `/whoami` with the stored key. |
 | `neosmith doctor` | Per-harness live protocol check + audit-log integrity. |
@@ -136,12 +137,15 @@ Every command supports `--help`. Run `neosmith help` or `neosmith <harness> help
 |---|---|---|---|---|
 | **Claude Code** | `neosmith claude` | `~/.claude/settings.json` (0600) + VS Code/Cursor `claudeCode.*` if the extension is installed | `ANTHROPIC_AUTH_TOKEN` literal (0600) | Restart after |
 | **Codex** | `neosmith codex` | `~/.codex/config.toml` (0600) | `$OPENAI_API_KEY` (env-key ref) | Restart after; export the printed line |
-| **Continue** | `neosmith continue` | `~/.continue/config.yaml` (0600) | `apiKey` literal (0600) | Reload VS Code window |
-| **Cline** | `neosmith cline` | `~/.cline/data/settings/providers.json` + `models.json` (0600) — read by Cline 4.x in VS Code/JetBrains **and** the standalone Cline CLI | `apiKey` literal (0600) | Reload the Cline panel |
+| **Continue** | `neosmith continue` | `~/.continue/config.yaml` (0600) — one model entry per SKU | `apiKey` literal (0600) | Reload VS Code window |
+| **Cline** | `neosmith cline` | `~/.cline/data/settings/providers.json` (the **selected** provider + model) + `models.json` (the **catalogue**, all SKUs) — read by Cline 4.x in VS Code/JetBrains **and** the standalone Cline CLI | `apiKey` literal (0600) | Reload the Cline panel |
 | **JetBrains AI** | `neosmith jetbrains` | *(none — UI-driven)* | JetBrains IDE storage | Paste into Settings UI |
-| **Copilot Chat** | `neosmith copilot` | VS Code `chatLanguageModels.json` (key in OS-keychain) | OS-keychain (SecretStorage) | Reload window; paste key in picker once |
-| **Zed** | `neosmith zed` | `~/.config/zed/settings.json` (0600) | literal (0600) | Restart Zed |
+| **Copilot Chat** | `neosmith copilot` | VS Code `chatLanguageModels.json` — one model entry per SKU (key in OS-keychain) | OS-keychain (SecretStorage) | Reload window; paste key in picker once |
+| **Zed** | `neosmith zed` | `~/.config/zed/settings.json` (0600) — one `available_models` entry per SKU | literal (0600) | Restart Zed |
 | **Cursor** | `neosmith cursor` | *(none — native BYOK is UI-only, needs Cursor Pro/Ultra)* | Cursor's encrypted, server-synced BYOK store (not `settings.json`) | Enter in Cursor → Settings → Models; or use `neosmith claude on` + the Claude Code extension |
+| **OpenCode** | `neosmith opencode` | `~/.config/opencode/opencode.json` (0600) — `provider.neosmith` plus `model`/`small_model` | `apiKey` literal (0600) | Restart OpenCode |
+| **OpenClaw** | `neosmith openclaw` | `~/.openclaw/openclaw.json` (0600) — `models.providers.neosmith` plus `agents.defaults.model.primary` | `apiKey` literal (0600) | Restart the gateway |
+| **Junie CLI** | `neosmith junie` | `~/.junie/models/neosmith*.json` (0600) — five custom model profiles: one per SKU plus a wired-tier alias | `apiKey` literal (0600) | Select one: `junie --model custom:neosmith` |
 
 Every harness supports `on`, `off`, `status`, and `help`. `off` restores your pre-connect configuration — file-based harnesses from a snapshot under `~/.neosmith/snapshots/`, and the UI-driven ones by clearing the on-flag and telling you what to switch back in the IDE.
 
@@ -191,9 +195,15 @@ Claude Code lists two entries when the IDE extension is wired — the CLI config
 Cline is a single product with three front ends — the VS Code extension, the JetBrains plugin, and the standalone `cline` CLI — and since 4.x they share one global config:
 
 ```
-($CLINE_DIR || ~/.cline)/data/settings/providers.json   # provider, key, model, baseUrl
-($CLINE_DIR || ~/.cline)/data/settings/models.json      # context window + capabilities
+($CLINE_DIR || ~/.cline)/data/settings/providers.json   # provider, key, baseUrl, SELECTED model
+($CLINE_DIR || ~/.cline)/data/settings/models.json      # the CATALOGUE — every SKU + its window
 ```
+
+The split trips people up: `providers.json` carries a single `model` field, so
+reading only that file makes it look as though one model was registered. It is
+the model currently *in use*. `models.json` is the registry Cline enumerates,
+and `on` puts all four NeoSmith SKUs there — which is what makes the other
+tiers selectable without re-running it.
 
 `neosmith cline on` writes both, registers the `openai-compatible` provider, and sets `lastUsedProvider` so the provider it wrote is the one Cline actually uses — a wired-but-unselected provider is a no-op, and `neosmith cline status` says so explicitly if you switch away in the UI later. `CLINE_PROVIDER_SETTINGS_PATH` relocates `providers.json`; the CLI follows it.
 
@@ -216,6 +226,31 @@ So: restart VS Code → Copilot Chat → model picker → **Manage Language Mode
 **JetBrains AI Assistant** (fully UI-driven): `on` prints the values to paste into **Settings → Tools → AI Assistant → Providers & API Keys** (OpenAI-compatible, URL `https://router.neosmith.ai/v1`, tool calling enabled), plus the recommended per-feature model assignments (Chat → pro, inline/commit → lite, test/doc → basic). Works in IntelliJ, PyCharm, GoLand, WebStorm, Rider, CLion, DataGrip, RubyMine, RustRover, PhpStorm, and JetBrains Air.
 
 **Cursor** (fully UI-driven, Pro-gated): Cursor's native BYOK **cannot** be set from `settings.json` — it lives in an encrypted, server-synced store and custom OpenAI endpoints require **Cursor Pro/Ultra**. `on` prints the Settings → Models paste-in values (OpenAI API Key, Override Base URL → `…/v1`, the NeoSmith SKUs to Add + Verify). The fully scriptable alternative — no Pro license needed — is `neosmith claude on` plus the Claude Code extension in Cursor.
+
+---
+
+## Every tier is installed, not just the one you wired
+
+`GET /v1/models` returns model **ids only** — no context window, no capabilities. A client with a custom endpoint therefore has no way to discover that `neosmith.intelligent-pro` holds 1M tokens, and falls back to a conservative default that compacts far too early.
+
+So `on` writes the whole catalogue, with each SKU's real window, for every harness whose config has somewhere to put it:
+
+| Harness | Where | Field that carries the window |
+|---|---|---|
+| Claude Code | tier ladder in `settings.json` | *(none — the Anthropic client knows)* |
+| Cline | `models.json` (**not** `providers.json`) | `contextWindow` |
+| Continue | `config.yaml` | `defaultCompletionOptions.contextLength` |
+| Copilot Chat | `chatLanguageModels.json` | `maxInputTokens` |
+| Zed | `available_models` | `max_tokens` — **Zed's name for the context window** |
+| OpenCode | `provider.neosmith.models` | `limit.context` |
+| OpenClaw | `models.providers.neosmith.models` | `contextWindow` |
+| Junie CLI | one profile file per SKU | `maxContextLength` |
+
+`neosmith.neolite` is 512K — the sealed budget tier — and the other three are 1M. Codex is the one exception: `config.toml` has no catalogue to populate, just `model = "…"` and a generic provider, and you type any SKU at `/model`.
+
+The practical payoff: switching tiers inside these tools does **not** re-run `on`, so an unregistered SKU is not selectable at all. With all four registered you switch in the tool's own picker.
+
+`tests/../scripts/contract/model-catalogue.test.js` enforces this — every harness is either in the catalogue table or exempt with a written reason.
 
 ---
 
@@ -328,12 +363,104 @@ models:
 
 Add `--autocomplete` to also route inline completions through `neosmith.intelligent-lite` (fast, low-cost, latency-sensitive): `neosmith continue on --autocomplete`.
 
+### OpenCode
+
+```json
+{
+  "provider": {
+    "neosmith": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "NeoSmith",
+      "options": {
+        "baseURL": "https://router.neosmith.ai/v1",
+        "apiKey": "sk-plus-yourname-xxxxxx"
+      },
+      "models": {
+        "neosmith.intelligent-pro": { "name": "NeoSmith Pro", "limit": { "context": 1000000, "output": 128000 } }
+      }
+    }
+  },
+  "model": "neosmith/neosmith.intelligent-pro",
+  "small_model": "neosmith/neosmith.neolite"
+}
+```
+
+Every SKU is registered with its real context window, not just the one you wired — OpenCode cannot discover those (`GET /v1/models` returns ids only), and switching tiers inside OpenCode does not re-run `on`. `neolite` is the sealed 512K tier; the rest are 1M.
+
+OpenCode reads `opencode.jsonc` in preference to `opencode.json` when both exist, and `.jsonc` legally contains comments and trailing commas. **A config this CLI cannot parse as strict JSON is never rewritten** — `on` snapshots it, prints the block, and leaves your file alone.
+
+### OpenClaw
+
+```json
+{
+  "models": {
+    "providers": {
+      "neosmith": {
+        "baseUrl": "https://router.neosmith.ai/v1",
+        "apiKey": "sk-plus-yourname-xxxxxx",
+        "api": "openai-completions",
+        "models": [
+          { "id": "neosmith.intelligent-pro", "name": "NeoSmith Pro",
+            "contextWindow": 1000000, "maxTokens": 128000,
+            "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 } }
+        ]
+      }
+    }
+  },
+  "agents": { "defaults": { "model": { "primary": "neosmith/neosmith.intelligent-pro" } } }
+}
+```
+
+OpenClaw refuses to start on a config that does not match its schema — unknown keys, wrong types and invalid values are all fatal to the gateway, not merely ignored. So `on` writes exactly the documented keys and nothing else: no version stamp, no timestamps, no NeoSmith bookkeeping.
+
+`~/.openclaw/openclaw.json` is **JSON5**. If yours has comments, trailing commas or unquoted keys, `on` will not rewrite it — it prints the equivalent `openclaw config set` / `openclaw models set` commands, which go through OpenClaw's own parser.
+
+### Junie CLI
+
+`~/.junie/models/` (or `$JUNIE_HOME/models/` if you have set it) — one file per custom model profile, where the filename stem *is* the profile id.
+
+A Junie profile holds **one** model. There is no catalogue field the way OpenCode and OpenClaw have, so registering every NeoSmith tier means writing a file per tier. `neosmith junie on` writes five:
+
+| Profile | Model |
+|---|---|
+| `custom:neosmith` | the tier you connected with (the alias) |
+| `custom:neosmith-pro` | `neosmith.intelligent-pro` |
+| `custom:neosmith-basic` | `neosmith.intelligent-basic` |
+| `custom:neosmith-lite` | `neosmith.neolite` |
+| `custom:neosmith-maestro` | `neosmith.intelligent-maestro` |
+
+The alias means `--model custom:neosmith` keeps working whichever tier you wired; the four tier profiles let you switch inside Junie without re-running `on`. The list is generated from the manifest, so a new SKU shows up here automatically.
+
+Each file looks like this (`neosmith-lite.json`):
+
+```json
+{
+  "id": "neosmith.neolite",
+  "displayName": "NeoSmith NeoLite",
+  "providerName": "NeoSmith",
+  "baseUrl": "https://router.neosmith.ai/v1/chat/completions",
+  "apiType": "OpenAICompletion",
+  "apiKey": "sk-plus-yourname-xxxxxx",
+  "maxContextLength": 512000
+}
+```
+
+`maxContextLength` is per profile and is the real window — 512K for NeoLite, 1M for the rest. The pro/basic/maestro profiles also carry `"fasterModel": { "id": "neosmith.neolite" }` for helper tasks; the lite profile does not, because a `fasterModel` pointing at its own primary is noise.
+
+Two things are unlike every other harness here:
+
+- **`baseUrl` is the full endpoint, not the `/v1` root.** That is Junie's contract — JetBrains' own example for a local model is `http://localhost:11434/v1/chat/completions`.
+- **There is no persistent default for a custom profile.** Select it per run with `junie --model custom:neosmith`, or set `JUNIE_MODEL=custom:neosmith` — `on` prints the platform-correct way to do that (`setx` on Windows, an `export` in your rc file on POSIX).
+
+`on` merges rather than replaces, so a `temperature` or `extraHeaders` you added to any of these profiles survives; `off` takes back only the fields NeoSmith wrote, removes each file outright if nothing of yours is left on it, and leaves every other profile in the directory alone. A profile that already existed at one of those names before you connected is restored byte-for-byte rather than deleted.
+
 ---
 
 ## Keys and storage
 
 - `~/.neosmith/config.json` holds your key as a plaintext literal (mode `0600`). No OS keychain — the CLI stores all harness keys as `0600` literals, intentionally, so it's sandbox-friendly and works after a restart without prompting.
 - Each file-writable harness bakes the key into its own config (also `0600`). **Codex** is the exception: it uses an `env_key` reference and reads `$OPENAI_API_KEY` at runtime. **Copilot Chat** is the other exception: the model entry is file-writable but the key goes into VS Code's OS-keychain SecretStorage.
+- `neosmith keys` reprints what you have — every environment with a stored key, and which harness is holding which. Values are masked (`sk-plus-…f3a1`) until you pass `--reveal`; `--json` is there for scripting. A harness whose config holds a key that matches **none** of your stored keys is flagged, which is how you catch a harness still sitting on a rotated credential.
 - `off` removes the harness-specific keys but leaves your stored key intact — re-run `<harness> on` to reconnect.
 - `neosmith uninstall` disconnects every harness, then removes `~/.neosmith` (add `--all` to also remove the launcher).
 

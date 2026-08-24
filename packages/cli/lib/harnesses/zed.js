@@ -61,6 +61,45 @@ function hasNeoSmith(s) {
   return harness.isNeosmithUrl(openai.api_url) || harness.isNeosmithUrl(openai.base_url);
 }
 
+function displayNameFor(sku) {
+  const tiers = harness.manifest().claudeTierMap || {};
+  for (const t of Object.values(tiers)) {
+    if (t && t.model === sku && t.name) return t.name;
+  }
+  return `NeoSmith ${sku}`;
+}
+
+// One available_models entry per SKU.
+//
+// `max_tokens` is Zed's name for the model's CONTEXT WINDOW, not its output
+// cap — the docs are explicit: "you must provide the model's context window in
+// max_tokens". Before 0.10.0 this module wrote a flat `max_tokens: 8192` for
+// the single SKU it registered, so a 1M-context NeoSmith model behaved in Zed
+// like an 8K one and compacted almost immediately. The real windows come from
+// the manifest's modelSpecs, the same source cline.js's catalog uses.
+//
+// And every SKU is registered, not just the wired one: switching model in Zed's
+// picker does not re-run `on`, so an unregistered SKU is simply not selectable.
+function availableModels(wired) {
+  const specs = harness.manifest().modelSpecs || {};
+  const entries = Object.entries(specs).map(([sku, spec]) => ({
+    name: sku,
+    display_name: displayNameFor(sku),
+    max_tokens: spec.contextWindow,
+    tool_calling: true,
+  }));
+  if (!entries.some((e) => e.name === wired)) {
+    const fallback = specs[harness.MODELS.pro] || { contextWindow: 1000000 };
+    entries.push({
+      name: wired,
+      display_name: displayNameFor(wired),
+      max_tokens: fallback.contextWindow,
+      tool_calling: true,
+    });
+  }
+  return entries;
+}
+
 function on(ctx) {
   const model = ctx.model;
   const key = ctx.key;
@@ -92,12 +131,7 @@ function on(ctx) {
       ...(next.language_models.openai && Array.isArray(next.language_models.openai.available_models)
         ? next.language_models.openai.available_models
         : []),
-      {
-        name: model,
-        display_name: "NeoSmith " + model,
-        max_tokens: 8192,
-        tool_calling: true,
-      },
+      ...availableModels(model),
     ],
   };
 
@@ -241,13 +275,22 @@ function status(ctx) {
   const openai = lm.openai || {};
   const wiredEnv = harness.envForUrl(openai.api_url || openai.base_url || "");
   if (!wiredEnv) return { on: false, detail: "no NeoSmith provider in language_models.openai" };
-  const models = Array.isArray(openai.available_models)
-    ? openai.available_models.map((m) => m.name).join(", ")
-    : "(unset)";
+  // Four SKUs plus whatever the user had makes a full list unreadable on one
+  // status line. Report the count, and the smallest declared window — a SKU
+  // registered without its real max_tokens is the failure worth surfacing.
+  const ours = (Array.isArray(openai.available_models) ? openai.available_models : [])
+    .filter((m) => m && typeof m.name === "string" && m.name.startsWith("neosmith."));
+  const windows = ours.map((m) => m.max_tokens).filter((n) => typeof n === "number");
+  // Compact, NOT toLocaleString: that renders 512000 as "5,12,000" under an
+  // en-IN locale and "512,000" under en-US, so the same config reads
+  // differently on two machines.
+  const compact = (n) => (n >= 1e6 ? `${n / 1e6}M` : n >= 1e3 ? `${n / 1e3}K` : String(n));
   return {
     on: true,
     env: wiredEnv,
-    detail: `models=${models} base=${openai.api_url || openai.base_url}`,
+    detail: `${ours.length} SKU(s)` +
+      (windows.length ? ` · context ${compact(Math.min(...windows))}–${compact(Math.max(...windows))}` : " · context unset") +
+      ` · base=${openai.api_url || openai.base_url}`,
   };
 }
 
@@ -265,10 +308,22 @@ function help() {
   ].join("\n");
 }
 
+// Which key Zed is holding, for `neosmith keys`. Only report it when the block
+// actually points at NeoSmith — an api_key sitting under a user's own OpenAI
+// wiring is theirs, not ours to surface.
+function keyRef() {
+  if (!io.fileExists(CONFIG)) return null;
+  const cfg = io.readJSON(CONFIG) || {};
+  if (!hasNeoSmith(cfg)) return null;
+  const value = cfg.language_models.openai.api_key;
+  if (typeof value !== "string" || !value) return null;
+  return { kind: "literal", value, file: CONFIG };
+}
+
 module.exports = {
   id: "zed",
   name: "Zed",
   writable: true,
   configFile: CONFIG,
-  on, off, status, help,
+  on, off, status, help, keyRef,
 };

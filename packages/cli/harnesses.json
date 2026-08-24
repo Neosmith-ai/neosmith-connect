@@ -170,6 +170,54 @@
       "docPage": "ides/cursor.md",
       "shortLabel": "Cursor",
       "notes": "Re-verified 2026-08-07 against the installed Cursor build: native BYOK is stored in an encrypted, server-synced store (aiserver.v1 byok/apiKeyCandidates/baseUrlCandidates), NOT settings.json — the string 'cursor.models.' never appears in Cursor's workbench bundle. Configured via Settings → Models UI and requires Cursor Pro/Ultra. CLI prints paste-in values. Scriptable alternative: Claude Code extension (`neosmith claude on`)."
+    },
+    {
+      "id": "opencode",
+      "name": "OpenCode",
+      "module": "./lib/harnesses/opencode.js",
+      "writable": true,
+      "configFile": "~/.config/opencode/opencode.json",
+      "wire": "openai-completions",
+      "defaultModel": "pro",
+      "keyMode": "literal-openai-key",
+      "idempotency": "warn-noop",
+      "registryOrder": 9,
+      "addedIn": "0.10.0",
+      "docPage": "agents/opencode.md",
+      "shortLabel": "OpenCode",
+      "notes": "Verified 2026-08-22 against opencode.ai/docs (config, providers, troubleshooting). Custom provider block: provider.neosmith.npm='@ai-sdk/openai-compatible' (the /v1/chat/completions package; @ai-sdk/openai is for /v1/responses), options.baseURL + options.apiKey, models.<sku>.limit.{context,output}, plus top-level model/small_model as '<provider>/<sku>'. Global config path is ~/.config/opencode/opencode.json on EVERY platform including Windows (%USERPROFILE%\\.config\\opencode). OpenCode reads opencode.jsonc in preference when it exists, and .jsonc legally has comments and trailing commas — the harness never rewrites a file JSON.parse cannot read; it prints the block to merge by hand."
+    },
+    {
+      "id": "openclaw",
+      "name": "OpenClaw",
+      "module": "./lib/harnesses/openclaw.js",
+      "writable": true,
+      "configFile": "~/.openclaw/openclaw.json",
+      "wire": "openai-completions",
+      "defaultModel": "pro",
+      "keyMode": "literal-openai-key",
+      "idempotency": "warn-noop",
+      "registryOrder": 10,
+      "addedIn": "0.10.0",
+      "docPage": "agents/openclaw.md",
+      "shortLabel": "OpenClaw",
+      "notes": "Verified 2026-08-22 against docs.openclaw.ai (gateway/configuration, concepts/model-providers). Provider block: models.providers.neosmith.{baseUrl,apiKey,api:'openai-completions',models[]}, selected via agents.defaults.model.primary='neosmith/<sku>'. Two hazards drive the module: the file is JSON5 (comments/trailing commas/unquoted keys legal), and 'OpenClaw only accepts configurations that fully match the schema — unknown keys, malformed types, or invalid values cause the Gateway to refuse to start'. So the written block carries exactly the documented keys and nothing else, and a JSON5 file this CLI cannot parse is never rewritten — `on` prints the equivalent `openclaw config set` commands instead."
+    },
+    {
+      "id": "junie",
+      "name": "Junie CLI",
+      "module": "./lib/harnesses/junie.js",
+      "writable": true,
+      "configFile": "~/.junie/models/neosmith.json",
+      "wire": "openai-completions",
+      "defaultModel": "pro",
+      "keyMode": "literal-openai-key",
+      "idempotency": "warn-noop",
+      "registryOrder": 11,
+      "addedIn": "0.10.0",
+      "docPage": "agents/junie-cli.md",
+      "shortLabel": "Junie CLI",
+      "notes": "Verified 2026-08-22 against junie.jetbrains.com/docs (custom-llm-models, environment-variables, junie-cli-model-selection). One JSON file per custom profile at $JUNIE_HOME/models/<profile>.json (JUNIE_HOME defaults to ~/.junie); the filename stem IS the profile id, selected as `junie --model custom:<id>`. A profile holds ONE model — there is no catalogue field the way opencode/openclaw have — so `on` writes one file per SKU (neosmith-pro / -basic / -lite / -maestro, from manifest.models) plus a `neosmith` alias pointing at the tier that was wired. Each tier profile beyond the alias is snapshotted under the compound id `junie-profile-<tier>`, the `-profile-` convention lib/originals.js already understands. Fields: id, baseUrl, apiType ('OpenAICompletion' | 'OpenAIResponses' | 'Google' | 'Anthropic'), apiKey (literal, or ${VAR}), displayName, providerName, maxContextLength, primaryModel/fasterModel. UNLIKE every other harness here, baseUrl is the FULL endpoint — JetBrains' own example is http://localhost:11434/v1/chat/completions — so the profiles point at <router>/v1/chat/completions. Confirmed against the router on 2026-08-23: POST /v1/chat/completions returns 200, POST /v1 returns 404, so a profile pointing at the /v1 root every other harness writes would fail every request. No documented persistent default for a custom profile; `on` prints both `--model custom:neosmith` and the platform-correct JUNIE_MODEL export."
     }
   ]
 }

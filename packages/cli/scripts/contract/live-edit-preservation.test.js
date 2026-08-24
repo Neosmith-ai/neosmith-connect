@@ -32,7 +32,8 @@ const path = require("node:path");
 
 const { withSandbox } = require("./_sandbox");
 
-const HARNESS_MODULES = ["claude", "cline", "codex", "continue", "copilot", "cursor", "jetbrains", "zed"];
+const HARNESS_MODULES = ["claude", "cline", "codex", "continue", "copilot", "cursor", "jetbrains", "zed",
+  "opencode", "openclaw", "junie"];
 
 function loadAll() {
   delete require.cache[require.resolve("../../lib/io")];

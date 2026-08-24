@@ -61,7 +61,7 @@ test("docs: packages/cli/README.md covers every top-level command the dispatcher
   // Mirror the dispatcher's top-level switch (bin/neosmith.js). Each must
   // appear in the canonical README so users discover it.
   const commands = ["login", "verify", "doctor", "setup", "reset", "status",
-    "uninstall", "models", "originals", "feedback", "help", "init"];
+    "uninstall", "models", "keys", "originals", "feedback", "help", "init"];
   for (const c of commands) {
     assert.ok(text.includes(c),
       `packages/cli/README.md must mention command "neosmith ${c}" (routed by the dispatcher)`);

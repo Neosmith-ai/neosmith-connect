@@ -4,6 +4,16 @@
 // Each harness module exports:
 //   { id, name, writable, configFile, on(ctx), off(ctx), status(ctx), help() }
 //
+// …and MAY export keyRef(), which reports the credential the harness is
+// actually holding on disk, for `neosmith keys`. It returns one of:
+//   { kind: "literal",  value, file }  — the key itself, read from its config
+//   { kind: "env-ref",  name,  file }  — the config names an env var (codex)
+//   { kind: "keychain", detail }       — an OS keychain we cannot read (copilot)
+//   null                               — nothing wired, or UI-driven, or the
+//                                        config could not be parsed
+// The registry defaults it to () => null, so a module that does not implement
+// it is simply reported as "can't tell" rather than breaking the command.
+//
 // Mirrors fireconnect's per-harness interface but with NeoSmith's wire format
 // and auth model (plaintext 0600 key in config, no keychain, no custom headers).
 //
@@ -63,6 +73,10 @@ function load() {
       off() { throw new Error(`${mod.id}.off not implemented`); },
       status() { return { on: false, detail: "not implemented" }; },
       help() { return `(${mod.id}: no help available)`; },
+      // Optional — see the interface note at the top of this file. Defaulted
+      // rather than required so `neosmith keys` degrades to "can't tell" for a
+      // harness that has not implemented it.
+      keyRef() { return null; },
     }, mod);
   }
 

@@ -24,6 +24,9 @@ A single-glance view of what works where. ✅ = supported and documented · ⚠�
 | **Copilot Chat** | OpenAI | `router.neosmith.ai/v1` | [agents/copilot.md](agents/copilot.md) |
 | **Zed** | OpenAI | `router.neosmith.ai/v1` | [agents/zed.md](agents/zed.md) |
 | **Cursor** | OpenAI | `router.neosmith.ai/v1` | [ides/cursor.md](ides/cursor.md) |
+| **OpenCode** | OpenAI | `router.neosmith.ai/v1` | [agents/opencode.md](agents/opencode.md) |
+| **OpenClaw** | OpenAI | `router.neosmith.ai/v1` | [agents/openclaw.md](agents/openclaw.md) |
+| **Junie CLI** | OpenAI | `router.neosmith.ai/v1` | [agents/junie-cli.md](agents/junie-cli.md) |
 <!-- END manifest:agents-endpoint -->
 
 ## Agents × IDEs

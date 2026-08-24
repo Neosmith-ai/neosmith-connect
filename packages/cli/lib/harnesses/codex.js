@@ -454,10 +454,22 @@ function help() {
   ].join("\n");
 }
 
+// Codex never stores the key. config.toml holds `env_key = "<NAME>"` and Codex
+// reads that variable at runtime — which is exactly what `neosmith keys` has to
+// report, rather than implying the config contains a credential it does not.
+function keyRef() {
+  if (!io.fileExists(CONFIG)) return null;
+  const text = io.readText(CONFIG) || "";
+  if (!/\[model_providers\.neosmith\]/.test(text)) return null;
+  const m = text.match(/env_key\s*=\s*"([^"]+)"/);
+  if (!m) return null;
+  return { kind: "env-ref", name: m[1], file: CONFIG };
+}
+
 module.exports = {
   id: "codex",
   name: "Codex",
   writable: true,
   configFile: CONFIG,
-  on, off, status, help,
+  on, off, status, help, keyRef,
 };
