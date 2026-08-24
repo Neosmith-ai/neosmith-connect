@@ -2,7 +2,7 @@
 title: JetBrains AI Assistant
 layout: default
 parent: Agents
-nav_order: 5
+nav_order: 6
 ---
 
 # JetBrains AI Assistant + NeoSmith

@@ -2,7 +2,7 @@
 title: OpenCode
 layout: default
 parent: Agents
-nav_order: 8
+nav_order: 9
 ---
 
 # OpenCode + NeoSmith

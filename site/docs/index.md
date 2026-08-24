@@ -34,7 +34,7 @@ You'll need three things:
 
 1. **Node.js 18 or newer** on your machine (`node --version` should print `v18` or higher).
 2. **A NeoSmith API key** — `sk-plus-…` (Pro, Opus-tier), `sk-std-…` (Basic, Sonnet-tier), or `sk-slm-…` (Lite, SLM-only). Get one from your team lead or email [contact-us@neosmith.ai](mailto:contact-us@neosmith.ai).
-3. **At least one AI coding tool already installed** — Claude Code, Codex, Continue, Cline, JetBrains AI, Copilot Chat, Zed, or Cursor. (NeoSmith works alongside the tool you already use; it doesn't replace any of them.)
+3. **At least one AI coding tool already installed** — Claude Code, Codex, Continue, Cline, JetBrains AI, Copilot Chat, Zed, Cursor, OpenCode, OpenClaw, or Junie CLI. (NeoSmith works alongside the tool you already use; it doesn't replace any of them.)
 
 Supported platforms: macOS, Linux, Windows (use **Git Bash** for the installer — see the [Windows note](#windows-note)).
 

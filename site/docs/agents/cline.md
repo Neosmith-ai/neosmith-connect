@@ -2,7 +2,7 @@
 title: Cline
 layout: default
 parent: Agents
-nav_order: 3
+nav_order: 2
 ---
 
 # Cline + NeoSmith

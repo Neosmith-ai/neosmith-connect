@@ -35,6 +35,7 @@ function top() {
   ui.log("  " + ui.c("cyan", "neosmith <harness> off") + "         Restore a harness's pre-connect config");
   ui.log("  " + ui.c("cyan", "neosmith <harness> status") + "      Show one harness's state");
   ui.log("  " + ui.c("cyan", "neosmith status") + "                Show all harnesses + stored key");
+  ui.log("  " + ui.c("cyan", "neosmith update") + "                Update to the latest version (keeps your key + wiring; --check to look only)");
   ui.log("  " + ui.c("cyan", "neosmith keys") + "                  Reprint your stored keys + which harness holds which (--reveal / --json)");
   ui.log("  " + ui.c("cyan", "neosmith originals") + "             Where your pre-connect settings are stored (--show / --export)");
   ui.log("  " + ui.c("cyan", "neosmith verify") + "                Hit /whoami with the stored key");

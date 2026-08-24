@@ -94,6 +94,57 @@ function generateAgentsEndpointTable(manifest) {
   return ["| Agent | Format | Endpoint | Guide |", "|---|---|---|---|", ...rows].join("\n");
 }
 
+// The Agents section index on the docs site. Hand-maintained until now, and it
+// showed it: the table still listed five agents long after copilot, zed and
+// cursor shipped in 0.3.0. Links are section-relative (Just-the-Docs strips the
+// .md), which is why this cannot reuse generateAgentsEndpointTable.
+function generateAgentsIndexTable(manifest) {
+  const rows = manifestHarnessesSorted(manifest).map((h) => {
+    const fmt = WIRE_HUMAN[h.wire] || h.wire;
+    const ep = ENDPOINT_HUMAN(h.wire, defaultEnv(manifest).baseUrl, defaultEnv(manifest).openaiBaseUrl);
+    const docRel = (h.docPage || `agents/${h.id}.md`).replace(/^\.\//, "");
+    // agents/foo.md -> foo ; ides/cursor.md -> ../ides/cursor
+    const slug = docRel.replace(/\.md$/, "");
+    const link = slug.startsWith("agents/") ? slug.slice("agents/".length) : `../${slug}`;
+    const label = h.shortLabel || h.name;
+    return `| [${label}](${link}) | ${fmt} | \`${ep.replace(/`/g, "")}\` |`;
+  });
+  return ["| Agent | Format | Endpoint |", "|---|---|---|", ...rows].join("\n");
+}
+
+// Which harnesses speak which wire format, for the endpoints reference. The
+// "Used by" lists there were written by hand and stopped at Codex.
+function generateEndpointsTable(manifest) {
+  const env = defaultEnv(manifest);
+  const byWire = { anthropic: [], openai: [] };
+  for (const h of manifestHarnessesSorted(manifest)) {
+    const label = h.shortLabel || h.name;
+    (h.wire === "anthropic-messages" ? byWire.anthropic : byWire.openai).push(label);
+  }
+  return [
+    "| Endpoint | Format | Path examples | Used by |",
+    "|---|---|---|---|",
+    `| \`${env.baseUrl}\` | **Anthropic Messages API** | \`/v1/messages\` | ${byWire.anthropic.join(", ") || "—"} |`,
+    `| \`${env.openaiBaseUrl}\` | **OpenAI API** | \`/v1/chat/completions\`, \`/v1/responses\`, \`/v1/models\` | ${byWire.openai.join(", ")} |`,
+  ].join("\n");
+}
+
+// The SKU ladder. Generated because the hand-written copy in endpoints.md still
+// advertised `neosmith.intelligent-lite`, which the manifest records as
+// DE-LISTED — the router still routes it, but GET /v1/models does not list it
+// and the real budget tier is neosmith.neolite. Publishing a de-listed SKU as a
+// supported option is a bug a reader cannot detect.
+function generateSkuTable(manifest) {
+  const specs = manifest.modelSpecs || {};
+  const rows = Object.values(manifest.claudeTierMap || {}).map((t) => {
+    const spec = specs[t.model] || {};
+    const ctx = spec.contextWindow ? `${spec.contextWindow / 1000000 >= 1 ? (spec.contextWindow / 1000000) + "M" : (spec.contextWindow / 1000) + "K"}` : "—";
+    const isDefault = t.model === manifest.models.pro ? " (**default**)" : "";
+    return `| \`${t.model}\` | ${t.name}${isDefault} | ${ctx} | ${t.description} |`;
+  });
+  return ["| Model SKU | Tier | Context | Behaviour |", "|---|---|---|---|", ...rows].join("\n");
+}
+
 // Targets — each: [absolute path, block id, body generator].
 const TARGETS = [
   [
@@ -105,6 +156,36 @@ const TARGETS = [
     path.join(MONOREPO_ROOT, "site", "COMPATIBILITY.md"),
     "agents-endpoint",
     generateAgentsEndpointTable,
+  ],
+  [
+    path.join(MONOREPO_ROOT, "site", "docs", "agents", "index.md"),
+    "agents-index",
+    generateAgentsIndexTable,
+  ],
+  [
+    path.join(MONOREPO_ROOT, "site", "reference", "endpoints.md"),
+    "endpoints",
+    generateEndpointsTable,
+  ],
+  [
+    path.join(MONOREPO_ROOT, "site", "reference", "endpoints.md"),
+    "skus",
+    generateSkuTable,
+  ],
+  // The Jekyll mirror is otherwise hand-maintained (see sync-docs-mirror.js),
+  // but these two blocks are pure manifest projections with no links to rewrite,
+  // so they are identical on both sides. Generating them here is what stops the
+  // PUBLISHED site from keeping a de-listed SKU after the source page drops it —
+  // which is exactly what had happened.
+  [
+    path.join(MONOREPO_ROOT, "site", "docs", "reference", "endpoints.md"),
+    "endpoints",
+    generateEndpointsTable,
+  ],
+  [
+    path.join(MONOREPO_ROOT, "site", "docs", "reference", "endpoints.md"),
+    "skus",
+    generateSkuTable,
   ],
 ];
 
