@@ -157,3 +157,44 @@ test("docs: every harness page has usable Jekyll front matter", () => {
     }
   }
 });
+
+// 10. A generated block must be separated from its markers by blank lines.
+//
+// kramdown — what GitHub Pages runs — treats an HTML block as raw until a blank
+// line. `<!-- BEGIN … -->` followed immediately by a table puts the table INSIDE
+// that raw block: emitted verbatim, never parsed, so the reader sees
+// `| Endpoint | Format | …` as literal pipes.
+//
+// All four generated pages shipped that way. It survived because the marker
+// blocks used to live only in site/README.md and site/COMPATIBILITY.md, which
+// were never built — the first one to be published was the first one to break.
+test("docs: every manifest marker block is fenced by blank lines so kramdown parses it", () => {
+  const docsRoot = path.join(ROOT, "site", "docs");
+  const walk = (dir, out = []) => {
+    for (const f of fs.readdirSync(dir)) {
+      const p = path.join(dir, f);
+      if (fs.statSync(p).isDirectory()) walk(p, out);
+      else if (f.endsWith(".md")) out.push(p);
+    }
+    return out;
+  };
+
+  let blocks = 0;
+  for (const file of walk(docsRoot)) {
+    const lines = fs.readFileSync(file, "utf8").split(/\r?\n/);
+    lines.forEach((line, i) => {
+      const rel = path.relative(ROOT, file);
+      if (/<!--\s*BEGIN manifest:/.test(line)) {
+        blocks++;
+        assert.equal((lines[i + 1] || "").trim(), "",
+          `${rel}:${i + 1} — a manifest BEGIN marker must be followed by a blank line, or ` +
+          `kramdown swallows the block and renders the table as literal pipes`);
+      }
+      if (/<!--\s*END manifest:/.test(line)) {
+        assert.equal((lines[i - 1] || "").trim(), "",
+          `${rel}:${i + 1} — a manifest END marker must be preceded by a blank line`);
+      }
+    });
+  }
+  assert.ok(blocks >= 5, `expected the five generated blocks, found ${blocks}`);
+});
