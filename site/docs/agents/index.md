@@ -10,6 +10,7 @@ has_children: true
 Pick your agent.
 
 <!-- BEGIN manifest:agents-index -->
+
 | Agent | Format | Endpoint |
 |---|---|---|
 | [Claude Code](claude-code) | Anthropic | `router.neosmith.ai` |
@@ -23,4 +24,5 @@ Pick your agent.
 | [OpenCode](opencode) | OpenAI | `router.neosmith.ai/v1` |
 | [OpenClaw](openclaw) | OpenAI | `router.neosmith.ai/v1` |
 | [Junie CLI](junie-cli) | OpenAI | `router.neosmith.ai/v1` |
+
 <!-- END manifest:agents-index -->

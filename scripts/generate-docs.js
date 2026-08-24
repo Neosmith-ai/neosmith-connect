@@ -69,7 +69,18 @@ function replaceMarkerBlock(text, blockId, body) {
   // The body (table rows joined with \n) is also normalized to match.
   const eol = text.includes("\r\n") ? "\r\n" : "\n";
   const bodyNorm = body.replace(/\r?\n/g, eol);
-  return text.slice(0, startIdx) + begin + eol + bodyNorm + eol + end + text.slice(endIdx + end.length);
+  // BLANK LINES around the markers are load-bearing, not cosmetic.
+  //
+  // kramdown (what GitHub Pages runs) treats an HTML block as raw until it
+  // hits a blank line. `<!-- BEGIN … -->` followed immediately by a table means
+  // the table is INSIDE that raw block: it is emitted verbatim and never parsed,
+  // so the reader sees `| Endpoint | Format | …` as literal pipes.
+  //
+  // This shipped that way on all four generated pages. It went unnoticed because
+  // the marker blocks previously lived only in site/README.md and
+  // site/COMPATIBILITY.md, which were never built — the first time one was
+  // published, it broke.
+  return text.slice(0, startIdx) + begin + eol + eol + bodyNorm + eol + eol + end + text.slice(endIdx + end.length);
 }
 
 function generateAgentsTable(manifest) {

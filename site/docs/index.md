@@ -313,6 +313,7 @@ You can change tiers any time by re-running `on` with a new `--model`. The CLI u
 ## Every supported harness
 
 <!-- BEGIN manifest:harnesses -->
+
 | # | Harness | What gets written | Where the key lives |
 |---|---|---|---|
 | 1 | **Claude Code** | `~/.claude/settings.json` (0600) | literal in its config (0600) |
@@ -326,6 +327,7 @@ You can change tiers any time by re-running `on` with a new `--model`. The CLI u
 | 9 | **OpenCode** | `~/.config/opencode/opencode.json` (0600) | literal in its config (0600) |
 | 10 | **OpenClaw** | `~/.openclaw/openclaw.json` (0600) | literal in its config (0600) |
 | 11 | **Junie CLI** | `~/.junie/models/neosmith.json` (0600) | literal in its config (0600) |
+
 <!-- END manifest:harnesses -->
 
 Use `neosmith <harness> help` for per-harness notes (e.g. `--autocomplete` is a Continue-only flag). Per-harness deep dives live under [Agents](agents/) and per-IDE deep dives under [IDEs](ides/).

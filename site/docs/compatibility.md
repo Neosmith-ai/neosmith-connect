@@ -20,6 +20,7 @@ A single-glance view of what works where. ✅ = supported and documented · ⚠�
 ## Agents × Endpoint
 
 <!-- BEGIN manifest:agents-endpoint -->
+
 | Agent | Format | Endpoint | Guide |
 |---|---|---|---|
 | **Claude Code** | Anthropic | `router.neosmith.ai` | [agents/claude-code.md](agents/claude-code.md) |
@@ -33,6 +34,7 @@ A single-glance view of what works where. ✅ = supported and documented · ⚠�
 | **OpenCode** | OpenAI | `router.neosmith.ai/v1` | [agents/opencode.md](agents/opencode.md) |
 | **OpenClaw** | OpenAI | `router.neosmith.ai/v1` | [agents/openclaw.md](agents/openclaw.md) |
 | **Junie CLI** | OpenAI | `router.neosmith.ai/v1` | [agents/junie-cli.md](agents/junie-cli.md) |
+
 <!-- END manifest:agents-endpoint -->
 
 ## Agents × IDEs
