@@ -2,6 +2,20 @@ title: NeoSmith Developer Guide
 description: Connect your IDE and AI coding agent to NeoSmith in under 5 minutes.
 remote_theme: just-the-docs/just-the-docs
 
+# THIS IS A PROJECT SITE, served from a subpath, and Jekyll has to be told so.
+#
+# Without `baseurl`, every URL the theme emits is root-relative — the stylesheet
+# as /assets/css/…, every nav entry as /agents/… — and GitHub serves this site
+# at /neosmith-connect/, so all of them 404. The landing page still returns 200,
+# which is what made this survive: it loads (unstyled), and then everything you
+# click is dead. The three content links that already use {{ site.baseurl }}
+# were resolving to "" for the same reason, pointing at the org root.
+#
+# `url` + `baseurl` are also what `absolute_url` needs for canonical links and
+# the sitemap.
+url: "https://neosmith-ai.github.io"
+baseurl: "/neosmith-connect"
+
 # Pages build: driven by .github/workflows/pages.yml on push to main.
 # The repo's Pages "Build source" is already set to GitHub Actions
 # (build_type: "workflow"), so that workflow is what serves this site.
