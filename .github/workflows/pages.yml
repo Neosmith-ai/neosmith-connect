@@ -50,12 +50,13 @@ jobs:
         # 404. agents/copilot.md and agents/zed.md did exactly that from 0.3.0
         # until it was noticed by hand.
         #
-        # DRIFT is ratcheted, not fixed. The mirror carries hand-edited content
-        # an automated re-generation cannot reproduce (see the script header),
-        # so failing on any drift would fail forever. --max-drift fails only if
-        # the count GROWS. Lower the ceiling as pages are brought back in sync;
-        # raise it only deliberately, in a commit that says why.
-        run: node scripts/sync-docs-mirror.js --check --max-drift=15
+        # DRIFT is reported, not gated. The mirror carries hand-edited content an
+        # automated re-generation cannot reproduce (see the script header), and
+        # the count is not stable across runners — a Windows checkout counted two
+        # more than a Linux one for the same commit. A threshold that depends on
+        # the runner is one people re-run instead of reading.
+        # `--max-drift=N` is still there for local use.
+        run: node scripts/sync-docs-mirror.js --check
 
       - uses: ruby/setup-ruby@v1
         with:

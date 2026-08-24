@@ -64,9 +64,13 @@ jobs:
         # site, with every link to it a 404. Caught here rather than at deploy,
         # so the PR that introduces it is the PR that fails.
         #
-        # Drift is ratcheted, not failed on: the mirror carries hand-edited
-        # content by design. See scripts/sync-docs-mirror.js.
-        run: node scripts/sync-docs-mirror.js --check --max-drift=15
+        # Drift is REPORTED, not gated. The mirror carries hand-edited content
+        # by design, and the drift count turned out to differ between a Linux
+        # and a Windows checkout — a gate that depends on which runner you land
+        # on is a gate people learn to re-run rather than read. `missing` does
+        # not have that problem: a file is there or it is not.
+        # `--max-drift=N` still exists for local use.
+        run: node scripts/sync-docs-mirror.js --check
 
       # Drives the e2e driver over all 8 harnesses against the offline contract
       # mock: no secrets, no network, no cost. Proves run.js works on every OS
