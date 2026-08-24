@@ -1,8 +1,8 @@
 ---
 title: Cursor
 layout: default
-parent: IDEs
-nav_order: 2
+parent: Harnesses
+nav_order: 8
 ---
 
 # Cursor + NeoSmith
@@ -31,7 +31,7 @@ model ladder — into `~/.claude/settings.json`. Then install the extension
 (Cursor's Extensions panel → search "Claude Code"), and press **Cmd+Esc** /
 **Ctrl+Esc** to open the panel.
 
-> Full details: [agents/claude-code.md](../agents/claude-code)
+> Full details: [harnesses/claude-code.md](claude-code)
 
 ---
 
@@ -52,7 +52,7 @@ Settings (Ctrl+,) → Models
   → paste your key: sk-plus-yourname-xxxxxx
   → enable "Override OpenAI Base URL" → https://router.neosmith.ai/v1
   → "Add model": neosmith.intelligent-pro  (then Verify)
-     optionally also: neosmith.intelligent-basic, neosmith.intelligent-lite
+     optionally also: neosmith.intelligent-basic, neosmith.neolite
   → pick the model in the chat model picker
 ```
 

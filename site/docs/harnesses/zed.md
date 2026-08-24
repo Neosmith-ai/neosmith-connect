@@ -1,8 +1,8 @@
 ---
 title: Zed
 layout: default
-parent: Agents
-nav_order: 10
+parent: Harnesses
+nav_order: 7
 ---
 
 # Zed + NeoSmith

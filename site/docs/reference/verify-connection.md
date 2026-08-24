@@ -27,7 +27,7 @@ curl -s https://router.neosmith.ai/v1/models \
   -H "Authorization: Bearer sk-plus-yourname-xxxxxx"
 ```
 
-Expected: a list including `neosmith.intelligent-pro`, `neosmith.intelligent-basic`, `neosmith.intelligent-lite`.
+Expected: a list including `neosmith.intelligent-pro`, `neosmith.intelligent-basic`, `neosmith.neolite`.
 
 ## 3. OpenAI-format chat (`/v1/chat/completions`)
 

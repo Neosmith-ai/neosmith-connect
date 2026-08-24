@@ -1,8 +1,8 @@
 ---
 title: Windows (WSL2)
 layout: default
-parent: Platforms
-nav_order: 4
+parent: Reference
+nav_order: 7
 ---
 
 # Platform Setup: Windows with WSL2 (Recommended)
@@ -96,7 +96,7 @@ npx @neosmithai/cli init sk-plus-yourname-xxxxxx
 
 JetBrains IDEs can open projects located in the WSL filesystem (`\\wsl$\Ubuntu\home\...`). For:
 - **Path A (Claude Code plugin):** Set the env vars in WSL and launch the JetBrains IDE from the WSL terminal, or use the JetBrains Gateway/WSL backend so the plugin inherits the WSL environment.
-- **Path B (JetBrains AI Assistant):** No env vars needed — configure `https://router.neosmith.ai/v1` directly in Settings (works the same whether the IDE is Windows-native or WSL-backed). See [agents/jetbrains-ai.md](../agents/jetbrains-ai).
+- **Path B (JetBrains AI Assistant):** No env vars needed — configure `https://router.neosmith.ai/v1` directly in Settings (works the same whether the IDE is Windows-native or WSL-backed). See [harnesses/jetbrains-ai.md](../harnesses/jetbrains-ai).
 
 ---
 
@@ -127,7 +127,7 @@ For best performance, keep your code under the WSL home directory (`~/projects/.
 | Slow git / file watching | Move the project from `/mnt/c/...` to `~/...` inside WSL |
 | `wsl --install` fails | Enable "Virtual Machine Platform" + "Windows Subsystem for Linux" in Windows Features, reboot |
 
-More: [reference/troubleshooting.md](../reference/troubleshooting)
+More: [reference/troubleshooting.md](troubleshooting)
 
 ## Next
 

@@ -1,8 +1,8 @@
 ---
 title: JetBrains AI Assistant
 layout: default
-parent: Agents
-nav_order: 6
+parent: Harnesses
+nav_order: 5
 ---
 
 # JetBrains AI Assistant + NeoSmith
@@ -65,8 +65,8 @@ All connected JetBrains IDEs (and JetBrains Air cloud environments) receive the 
 | Feature | Suggested SKU | Why |
 |---|---|---|
 | Chat | `neosmith.intelligent-pro` | May need Opus for hard questions |
-| Inline completion | `neosmith.intelligent-lite` | Latency-critical, SLM-only |
-| Commit message | `neosmith.intelligent-lite` | Short, structured |
+| Inline completion | `neosmith.neolite` | Latency-critical, SLM-only |
+| Commit message | `neosmith.neolite` | Short, structured |
 | Test / doc generation | `neosmith.intelligent-basic` | Mid-complexity, no Opus |
 
 ---

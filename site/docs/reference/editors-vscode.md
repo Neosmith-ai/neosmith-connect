@@ -1,8 +1,8 @@
 ---
 title: VS Code
 layout: default
-parent: IDEs
-nav_order: 1
+parent: Reference
+nav_order: 8
 ---
 
 # VS Code + NeoSmith
@@ -21,7 +21,7 @@ VS Code has the richest dual-path story. You can run **both** paths at once: Cla
 ### 1. Set environment variables
 
 Follow your platform guide for the exact mechanism:
-- [macOS](../platforms/macos) · [Linux](../platforms/linux) · [Windows native](../platforms/windows-native) · [Windows WSL](../platforms/windows-wsl)
+- [macOS](platform-macos) · [Linux](platform-linux) · [Windows native](platform-windows) · [Windows WSL](platform-wsl)
 
 ```bash
 export ANTHROPIC_BASE_URL=https://router.neosmith.ai
@@ -44,7 +44,7 @@ code --install-extension anthropic.claude-code
 
 Press **Cmd+Esc** (Mac) / **Ctrl+Esc** (Windows/Linux). The extension picks up the env vars automatically.
 
-> Full Claude Code setup details: [agents/claude-code.md](../agents/claude-code)
+> Full Claude Code setup details: [harnesses/claude-code.md](../harnesses/claude-code)
 
 ---
 
@@ -52,8 +52,8 @@ Press **Cmd+Esc** (Mac) / **Ctrl+Esc** (Windows/Linux). The extension picks up t
 
 Pick one (or both):
 
-- **Cline** (agentic plan/act): [agents/cline.md](../agents/cline)
-- **Continue** (chat + completions): [agents/continue.md](../agents/continue)
+- **Cline** (agentic plan/act): [harnesses/cline.md](../harnesses/cline)
+- **Continue** (chat + completions): [harnesses/continue.md](../harnesses/continue)
 
 Both install from the VS Code Extensions panel and point at `https://router.neosmith.ai/v1`.
 
@@ -90,8 +90,8 @@ No conflict — both route to NeoSmith.
 
 ## Works in all VS Code forks
 
-Path A (Claude Code) works identically in **Cursor**, **Windsurf**, **Kiro**, and **Google Antigravity** — they all inherit VS Code's extension ecosystem. See [ides/cursor.md](cursor) and [ides/antigravity.md](antigravity) for fork-specific notes.
+
 
 ## Troubleshooting
 
-[reference/troubleshooting.md](../reference/troubleshooting)
+[reference/troubleshooting.md](troubleshooting)

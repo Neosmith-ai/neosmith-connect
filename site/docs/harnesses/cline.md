@@ -1,8 +1,8 @@
 ---
 title: Cline
 layout: default
-parent: Agents
-nav_order: 2
+parent: Harnesses
+nav_order: 4
 ---
 
 # Cline + NeoSmith

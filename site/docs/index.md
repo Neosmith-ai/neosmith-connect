@@ -225,7 +225,7 @@ Cline 4.x and the standalone `cline` CLI share one global config, so a single co
 
 > **On Cline 3.x?** Provider config lived in VS Code's extension state back then, which no CLI can write. `on` prints the paste-in values for that case — open the Cline panel → gear icon → API Provider **OpenAI Compatible**, Base URL `https://router.neosmith.ai/v1`, your key, Model ID `neosmith.intelligent-pro`, streaming and tool calling on.
 
-See [Cline setup](agents/cline) for the by-hand routes (`cline auth …` and the gear-icon UI).
+See [Cline setup](harnesses/cline) for the by-hand routes (`cline auth …` and the gear-icon UI).
 
 ### JetBrains AI Assistant (fully UI-driven)
 
@@ -244,8 +244,8 @@ Settings → Tools → AI Assistant → Providers & API Keys
 
 Then assign models per feature (Settings → Tools → AI Assistant → Models):
   Chat              → neosmith.intelligent-pro
-  Inline completion → neosmith.intelligent-lite        # fast, low-cost
-  Commit message    → neosmith.intelligent-lite
+  Inline completion → neosmith.neolite        # fast, low-cost
+  Commit message    → neosmith.neolite
   Test/doc gen      → neosmith.intelligent-basic       # Sonnet-tier
 ```
 
@@ -277,7 +277,7 @@ Once you're set up, these are the only commands you'll reach for:
 | See which harnesses are connected | `neosmith status` |
 | Live-check that the router works | `neosmith doctor` |
 | Whoami / cap usage | `neosmith verify` |
-| Switch Claude Code to a cheaper model | `neosmith claude off && neosmith claude on --model neosmith.intelligent-lite` |
+| Switch Claude Code to a cheaper model | `neosmith claude off && neosmith claude on --model neosmith.neolite` |
 | Disconnect a tool without losing your key | `neosmith claude off` |
 | Switch tools (e.g. from Claude Code to Codex) | `neosmith claude off && neosmith codex on` |
 | Rotate your API key | `neosmith login sk-plus-NEWKEY` (overwrites old one) |
@@ -295,7 +295,7 @@ The default tier (`pro` / Opus-tier) routes cheap work to a distilled model and 
 |---|---|---|
 | Pro (default) | *(nothing)* | SLM-first, escalates to Opus on hard tasks |
 | Basic / Sonnet | `--model neosmith.intelligent-basic` | SLM-first with Sonnet fallback, **no Opus** |
-| Lite / SLM-only | `--model neosmith.intelligent-lite` | Lowest cost, no frontier escalation |
+| Lite / SLM-only | `--model neosmith.neolite` | Lowest cost, no frontier escalation |
 
 Examples:
 
@@ -330,7 +330,7 @@ You can change tiers any time by re-running `on` with a new `--model`. The CLI u
 
 <!-- END manifest:harnesses -->
 
-Use `neosmith <harness> help` for per-harness notes (e.g. `--autocomplete` is a Continue-only flag). Per-harness deep dives live under [Agents](agents/) and per-IDE deep dives under [IDEs](ides/).
+Use `neosmith <harness> help` for per-harness notes (e.g. `--autocomplete` is a Continue-only flag). Per-harness deep dives live under [Harnesses](harnesses/).
 
 ---
 
@@ -423,7 +423,7 @@ mkdir -p ~/.neosmith && git clone https://github.com/Neosmith-ai/neosmith-connec
 bash ~/.neosmith/connect/packages/cli/install.sh
 ```
 
-The installer also writes a `neosmith.cmd` shim alongside the bash launcher so `neosmith` works in `cmd.exe` and PowerShell. For per-platform shell-profile specifics (zsh vs bash, GUI-app vs `/etc/environment`, WSL vs native), see [Platforms](platforms/).
+The installer also writes a `neosmith.cmd` shim alongside the bash launcher so `neosmith` works in `cmd.exe` and PowerShell. For per-platform shell-profile specifics (zsh vs bash, GUI-app vs `/etc/environment`, WSL vs native), see the per-OS notes under [Reference](reference/).
 
 ---
 
@@ -439,10 +439,8 @@ To wipe the key, run `neosmith uninstall --all`.
 
 ## Where to next
 
-- **[IDEs](ides/)** — VS Code, JetBrains, Cursor, Antigravity
-- **[Agents](agents/)** — Claude Code, Codex, Cline, Continue, JetBrains AI
-- **[Platforms](platforms/)** — macOS, Linux, Windows (native + WSL2)
-- **[Reference](reference/)** — [endpoints & SKUs](reference/endpoints), [verify-connection playbook](reference/verify-connection), [troubleshooting](reference/troubleshooting)
+- **[Harnesses](harnesses/)** — all eleven, in the order `neosmith help` lists them
+- **[Reference](reference/)** — [endpoints & SKUs](reference/endpoints), [verify your connection](reference/verify-connection), [troubleshooting](reference/troubleshooting), and the per-OS and per-editor notes
 
 ---
 

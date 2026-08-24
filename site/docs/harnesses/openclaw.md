@@ -1,8 +1,8 @@
 ---
 title: OpenClaw
 layout: default
-parent: Agents
-nav_order: 8
+parent: Harnesses
+nav_order: 10
 ---
 
 # OpenClaw + NeoSmith

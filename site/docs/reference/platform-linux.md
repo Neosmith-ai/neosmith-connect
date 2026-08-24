@@ -1,8 +1,8 @@
 ---
 title: Linux
 layout: default
-parent: Platforms
-nav_order: 2
+parent: Reference
+nav_order: 5
 ---
 
 # Platform Setup: Linux

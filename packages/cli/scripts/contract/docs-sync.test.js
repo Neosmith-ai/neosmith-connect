@@ -89,7 +89,7 @@ test("docs: every manifest harness is named in the customer-facing docs", () => 
   const SURFACES = [
     ["site/docs/index.md", "the guide landing page"],
     ["site/docs/compatibility.md", "the compatibility matrix"],
-    ["site/docs/agents/index.md", "the Agents section index"],
+    ["site/docs/harnesses/index.md", "the Harnesses section index"],
     ["packages/cli/README.md", "the npm page"],
   ];
   for (const [rel, what] of SURFACES) {
@@ -114,7 +114,7 @@ test("docs: every manifest harness is named in the customer-facing docs", () => 
 test("docs: every manifest docPage resolves to a real page", () => {
   const harness = require("../../lib/harness");
   for (const h of harness.manifest().harnesses) {
-    const rel = (h.docPage || `agents/${h.id}.md`).replace(/^\.\//, "");
+    const rel = (h.docPage || `harnesses/${h.id}.md`).replace(/^\.\//, "");
     const full = path.join(ROOT, "site", "docs", rel);
     assert.ok(fs.existsSync(full),
       `manifest declares docPage "${rel}" for '${h.id}', but site/docs/${rel} does not exist — ` +
@@ -146,7 +146,7 @@ test("docs: the de-listed intelligent-lite SKU is not offered in the SKU tables"
 test("docs: every harness page has usable Jekyll front matter", () => {
   const harness = require("../../lib/harness");
   for (const h of harness.manifest().harnesses) {
-    const rel = (h.docPage || `agents/${h.id}.md`).replace(/^\.\//, "");
+    const rel = (h.docPage || `harnesses/${h.id}.md`).replace(/^\.\//, "");
     const mirror = path.join(ROOT, "site", "docs", rel);
     if (!fs.existsSync(mirror)) continue; // the docPage test above owns that failure
     const head = fs.readFileSync(mirror, "utf8").split("---")[1] || "";

@@ -1,7 +1,7 @@
 ---
 title: Claude Code
 layout: default
-parent: Agents
+parent: Harnesses
 nav_order: 1
 ---
 
@@ -11,7 +11,7 @@ Claude Code is Anthropic's CLI/IDE agent. It speaks the Anthropic Messages API a
 
 - **Endpoint:** `https://router.neosmith.ai` (bare host — Claude Code appends `/v1/messages`)
 - **Format:** Anthropic Messages API
-- **Works in:** terminal, VS Code, all JetBrains IDEs, Cursor, Antigravity, Neovim — anywhere the Claude Code CLI/extension runs
+- **Works in:** terminal, VS Code, all JetBrains IDEs, Cursor, Neovim — anywhere the Claude Code CLI/extension runs
 
 ---
 

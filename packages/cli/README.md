@@ -285,7 +285,7 @@ The default tier (`pro` / Opus-tier) routes cheap work to a distilled model and 
 | `neosmith.intelligent-lite` | Haiku/SLM-only | Lowest cost, SLM-only, no frontier escalation |
 | `neosmith.intelligent-maestro` | Highest-accuracy agentic coding | Fable-tier; top-of-ladder agentic lane |
 
-Anthropic-style ids (`claude-opus-4`, `claude-sonnet-4-6`) are also accepted for Claude Code and map to the corresponding tier. For Claude Code, `on` also writes the branded per-tier ladder (`ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU,FABLE}_MODEL` + `_NAME`/`_DESCRIPTION`) and top-level `model`/`advisorModel` — see [agents/claude-code.md](https://neosmith-ai.github.io/neosmith-connect/docs/agents/claude-code).
+Anthropic-style ids (`claude-opus-4`, `claude-sonnet-4-6`) are also accepted for Claude Code and map to the corresponding tier. For Claude Code, `on` also writes the branded per-tier ladder (`ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU,FABLE}_MODEL` + `_NAME`/`_DESCRIPTION`) and top-level `model`/`advisorModel` — see [the Claude Code guide](https://neosmith-ai.github.io/neosmith-connect/harnesses/claude-code).
 
 Examples:
 
@@ -575,7 +575,7 @@ Install Node first (Homebrew on macOS: `brew install node`; Windows: `winget ins
 
 ### Windows note
 
-The root `README.md` lists the native PowerShell installer (`irm … | iex`) as the first-path option — that's the simplest. Git Bash and the manual git-clone flow both work too. For PowerShell-specific pitfalls (`curl` = `Invoke-WebRequest`, env-var launch behavior, `curl.exe` vs `curl` alias), see [the Windows native guide](https://neosmith-ai.github.io/neosmith-connect/platforms/windows-native); for WSL2, see [the WSL2 guide](https://neosmith-ai.github.io/neosmith-connect/platforms/windows-wsl).
+The root `README.md` lists the native PowerShell installer (`irm … | iex`) as the first-path option — that's the simplest. Git Bash and the manual git-clone flow both work too. For PowerShell-specific pitfalls (`curl` = `Invoke-WebRequest`, env-var launch behavior, `curl.exe` vs `curl` alias), see [the Windows native guide](https://neosmith-ai.github.io/neosmith-connect/reference/platform-windows); for WSL2, see [the WSL2 guide](https://neosmith-ai.github.io/neosmith-connect/reference/platform-wsl).
 
 ---
 
