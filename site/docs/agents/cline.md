@@ -96,4 +96,4 @@ To confirm the traffic routed through NeoSmith, curl `/whoami` with your key (se
 - **400 Unknown model:** Use `neosmith.intelligent-pro`, not a `gpt-*` name.
 - **Config written, nothing changed:** `neosmith cline status` — if it says *NOT the active provider*, something switched `lastUsedProvider` after the connect. Re-run `neosmith cline off && neosmith cline on`, or pick NeoSmith in Cline's provider dropdown.
 - **The CLI and the editor disagree:** they share one file. Check `$CLINE_DIR` and `$CLINE_PROVIDER_SETTINGS_PATH` — either one relocates the config for whichever process has it set.
-- More: [Troubleshooting](../reference/troubleshooting)
+- More: [reference/troubleshooting.md](../reference/troubleshooting)

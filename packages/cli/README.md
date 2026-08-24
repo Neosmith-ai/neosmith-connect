@@ -575,7 +575,7 @@ Install Node first (Homebrew on macOS: `brew install node`; Windows: `winget ins
 
 ### Windows note
 
-The root `README.md` lists the native PowerShell installer (`irm … | iex`) as the first-path option — that's the simplest. Git Bash and the manual git-clone flow both work too. For PowerShell-specific pitfalls (`curl` = `Invoke-WebRequest`, env-var launch behavior, `curl.exe` vs `curl` alias), see [site/platforms/windows-native.md](https://github.com/Neosmith-ai/neosmith-connect/blob/main/site/platforms/windows-native.md); for WSL2, see [site/platforms/windows-wsl.md](https://github.com/Neosmith-ai/neosmith-connect/blob/main/site/platforms/windows-wsl.md).
+The root `README.md` lists the native PowerShell installer (`irm … | iex`) as the first-path option — that's the simplest. Git Bash and the manual git-clone flow both work too. For PowerShell-specific pitfalls (`curl` = `Invoke-WebRequest`, env-var launch behavior, `curl.exe` vs `curl` alias), see [the Windows native guide](https://neosmith-ai.github.io/neosmith-connect/platforms/windows-native); for WSL2, see [the WSL2 guide](https://neosmith-ai.github.io/neosmith-connect/platforms/windows-wsl).
 
 ---
 

@@ -1,5 +1,5 @@
 ---
-title: Reference: Endpoints, Model SKUs & Headers
+title: "Reference: Endpoints, Model SKUs & Headers"
 layout: default
 parent: Reference
 nav_order: 1

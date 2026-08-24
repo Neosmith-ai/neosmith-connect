@@ -19,13 +19,21 @@ A single-glance view of what works where. ✅ = supported and documented · ⚠�
 
 ## Agents × Endpoint
 
+<!-- BEGIN manifest:agents-endpoint -->
 | Agent | Format | Endpoint | Guide |
 |---|---|---|---|
-| **Claude Code** | Anthropic | `router.neosmith.ai` | [agents/claude-code.md](agents/claude-code) |
-| **OpenAI Codex** | OpenAI Responses | `router.neosmith.ai/v1` | [agents/codex.md](agents/codex) |
-| **Cline** | OpenAI | `router.neosmith.ai/v1` | [agents/cline.md](agents/cline) |
-| **Continue** | OpenAI | `router.neosmith.ai/v1` | [agents/continue.md](agents/continue) |
-| **JetBrains AI Assistant** | OpenAI | `router.neosmith.ai/v1` | [agents/jetbrains-ai.md](agents/jetbrains-ai) |
+| **Claude Code** | Anthropic | `router.neosmith.ai` | [agents/claude-code.md](agents/claude-code.md) |
+| **Codex** | OpenAI Responses | `router.neosmith.ai/v1` | [agents/codex.md](agents/codex.md) |
+| **Continue** | OpenAI | `router.neosmith.ai/v1` | [agents/continue.md](agents/continue.md) |
+| **Cline** | OpenAI | `router.neosmith.ai/v1` | [agents/cline.md](agents/cline.md) |
+| **JetBrains AI** | OpenAI | `router.neosmith.ai/v1` | [agents/jetbrains-ai.md](agents/jetbrains-ai.md) |
+| **Copilot Chat** | OpenAI | `router.neosmith.ai/v1` | [agents/copilot.md](agents/copilot.md) |
+| **Zed** | OpenAI | `router.neosmith.ai/v1` | [agents/zed.md](agents/zed.md) |
+| **Cursor** | OpenAI | `router.neosmith.ai/v1` | [ides/cursor.md](ides/cursor.md) |
+| **OpenCode** | OpenAI | `router.neosmith.ai/v1` | [agents/opencode.md](agents/opencode.md) |
+| **OpenClaw** | OpenAI | `router.neosmith.ai/v1` | [agents/openclaw.md](agents/openclaw.md) |
+| **Junie CLI** | OpenAI | `router.neosmith.ai/v1` | [agents/junie-cli.md](agents/junie-cli.md) |
+<!-- END manifest:agents-endpoint -->
 
 ## Agents × IDEs
 
@@ -37,6 +45,18 @@ A single-glance view of what works where. ✅ = supported and documented · ⚠�
 | **Cline** (standalone CLI) | ✅ terminal | ✅ terminal | ✅ terminal | ✅ terminal |
 | **Continue** | ✅ ext | ✅ plugin | ✅ ext | ⚠️ if extensible |
 | **JetBrains AI** | ❌ | ✅ | ❌ | ❌ |
+| **Copilot Chat** | ✅ ext | ❌ | ⚠️ fork-dependent | ⚠️ if extensible |
+| **OpenCode** (CLI) | ✅ terminal | ✅ terminal | ✅ terminal | ✅ terminal |
+| **OpenClaw** (gateway) | ✅ terminal | ✅ terminal | ✅ terminal | ✅ terminal |
+| **Junie CLI** | ✅ terminal | ✅ terminal | ✅ terminal | ✅ terminal |
+
+> **Zed** and **Cursor** are absent from this table on purpose: each is an editor
+> in its own right, not an agent hosted inside the four above. See
+> [agents/zed.md](agents/zed) and [ides/cursor.md](ides/cursor).
+>
+> **OpenClaw** is a self-hosted gateway rather than an in-editor agent — it fronts
+> coding agents from chat apps, so the IDE columns mean "the terminal you start it
+> from". See [agents/openclaw.md](agents/openclaw).
 
 ## Platforms (OS)
 

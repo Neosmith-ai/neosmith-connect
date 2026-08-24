@@ -23,6 +23,14 @@ Linux    ~/.config/Code/User/chatLanguageModels.json
 named profile   <that User dir>/profiles/<location>/chatLanguageModels.json
 ```
 
+---
+
+## Install
+
+Copilot Chat ships with VS Code, or install the **GitHub Copilot Chat** extension from the Marketplace.
+
+---
+
 ## Configure
 
 ### With the NeoSmith CLI (recommended)

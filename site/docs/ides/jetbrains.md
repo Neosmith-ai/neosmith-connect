@@ -36,7 +36,7 @@ JetBrains IDE
 
 ### 1. Set environment variables
 
-Add to your shell profile (see your [platform guide]({{ site.baseurl }}/#platforms)):
+Add to your shell profile (see your [platform guide]({{ site.baseurl }}/#platform-setup-operating-system)):
 
 ```bash
 export ANTHROPIC_BASE_URL=https://router.neosmith.ai
@@ -66,7 +66,7 @@ Settings (Cmd+, / Ctrl+Alt+S)
 
 Press **Cmd+Esc** (Mac) / **Ctrl+Esc** (Windows/Linux).
 
-> Full details + per-project override: [Claude Code setup](../agents/claude-code)
+> Full details + per-project override: [agents/claude-code.md](../agents/claude-code)
 
 ---
 
@@ -82,7 +82,7 @@ Settings → Tools → AI Assistant → Providers & API Keys
   → Models & API Keys tab → assign neosmith.intelligent-pro to all features
 ```
 
-> Full details incl. enterprise IDE Services: [JetBrains AI setup](../agents/jetbrains-ai)
+> Full details incl. enterprise IDE Services: [agents/jetbrains-ai.md](../agents/jetbrains-ai)
 
 ---
 
@@ -99,7 +99,7 @@ Cline settings:
   Model:    neosmith.intelligent-pro
 ```
 
-See [Cline setup](../agents/cline).
+See [agents/cline.md](../agents/cline).
 
 ---
 
@@ -131,4 +131,4 @@ Developers with the Claude Code plugin pick up NeoSmith on next IDE restart.
 - **Path A panel "Not connected":** Verify `echo $ANTHROPIC_BASE_URL`; restart IDE from a shell that has the env vars.
 - **Path B "Test Connection" fails:** URL must be exactly `https://router.neosmith.ai/v1`; ensure Tool calling is enabled.
 - **IDE started before env vars set:** Quit fully, open a new terminal, relaunch.
-- More: [Troubleshooting](../reference/troubleshooting)
+- More: [reference/troubleshooting.md](../reference/troubleshooting)

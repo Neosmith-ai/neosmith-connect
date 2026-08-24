@@ -44,7 +44,7 @@ code --install-extension anthropic.claude-code
 
 Press **Cmd+Esc** (Mac) / **Ctrl+Esc** (Windows/Linux). The extension picks up the env vars automatically.
 
-> Full Claude Code setup details: [Claude Code setup](../agents/claude-code)
+> Full Claude Code setup details: [agents/claude-code.md](../agents/claude-code)
 
 ---
 
@@ -52,8 +52,8 @@ Press **Cmd+Esc** (Mac) / **Ctrl+Esc** (Windows/Linux). The extension picks up t
 
 Pick one (or both):
 
-- **Cline** (agentic plan/act): [Cline setup](../agents/cline)
-- **Continue** (chat + completions): [Continue setup](../agents/continue)
+- **Cline** (agentic plan/act): [agents/cline.md](../agents/cline)
+- **Continue** (chat + completions): [agents/continue.md](../agents/continue)
 
 Both install from the VS Code Extensions panel and point at `https://router.neosmith.ai/v1`.
 
@@ -90,8 +90,8 @@ No conflict — both route to NeoSmith.
 
 ## Works in all VS Code forks
 
-Path A (Claude Code) works identically in **Cursor**, **Windsurf**, **Kiro**, and **Google Antigravity** — they all inherit VS Code's extension ecosystem. See [Cursor](cursor) and [Antigravity](antigravity) for fork-specific notes.
+Path A (Claude Code) works identically in **Cursor**, **Windsurf**, **Kiro**, and **Google Antigravity** — they all inherit VS Code's extension ecosystem. See [ides/cursor.md](cursor) and [ides/antigravity.md](antigravity) for fork-specific notes.
 
 ## Troubleshooting
 
-[Troubleshooting](../reference/troubleshooting)
+[reference/troubleshooting.md](../reference/troubleshooting)

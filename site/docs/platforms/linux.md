@@ -95,4 +95,4 @@ export ANTHROPIC_API_KEY=<org-neosmith-key>
 
 ## Next
 
-Pick your IDE or agent guide from the [Home]({{ site.baseurl }}/).
+Pick your IDE or agent guide from the [main README]({{ site.baseurl }}/).

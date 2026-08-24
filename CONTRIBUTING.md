@@ -449,7 +449,7 @@ server-side `dev_hard_ceiling_tokens`.
 Also:
 
 - **Harness metadata belongs in `harnesses.json`**, not hardcoded. Run
-  `npm run generate-docs -- --check` and `npm run sync-docs -- --check`; CI fails
+  `npm run generate-docs -- --check`; CI fails
   if the docs drift from the manifest.
 - **Never bake a key into a config file** when the harness supports env-var
   indirection — Codex's contract is `env_key`.

@@ -5,9 +5,9 @@ Monorepo for NeoSmith's CLI and developer-facing guide. A single
 
 - `packages/cli/` — the `@neosmithai/cli` Node CLI that wires IDEs and AI
   coding agents to NeoSmith's routing layer.
-- `site/` — the developer guide, published at
+- `site/docs/` — the developer guide, published at
   [neosmith-ai.github.io/neosmith-connect](https://neosmith-ai.github.io/neosmith-connect/).
-  Authored in `site/`; **built and served from `site/docs/`** — see below.
+  One tree: what you edit is what Jekyll builds and Pages serves.
 
 ## Layout
 
@@ -15,18 +15,14 @@ Monorepo for NeoSmith's CLI and developer-facing guide. A single
 neosmith-connect/
 ├── harnesses.json                 # single source of truth for all supported harnesses
 ├── packages/cli/                  # @neosmithai/cli source (the CLI package)
-├── site/                          # developer guide — AUTHORING copy
-│   ├── README.md                  # root guide
-│   ├── COMPATIBILITY.md
-│   ├── ides/  agents/  platforms/  reference/
-│   └── docs/                      # PUBLISHED copy — Jekyll builds THIS and Pages serves it.
-│                                  # Hand-maintained: adding a page under site/ does NOT
-│                                  # create it here. CI fails if a mirror is missing.
+├── site/
+│   ├── CONTRIBUTING.md            # how to contribute to the guide
+│   └── docs/                      # THE developer guide — Jekyll builds this, Pages serves it
+│       ├── index.md  compatibility.md
+│       └── agents/  ides/  platforms/  reference/
 ├── scripts/
-│   ├── generate-docs.js           # regenerates site README/COMPATIBILITY from harnesses.json
-│   ├── sync-docs-mirror.js        # CHECKS the site/docs/ mirror — reports drift, FAILS on
-│   │                              # a missing page. It does not write anything.
-│   └── check-published-docs.js    # fetches the LIVE site and asserts every harness has a page
+│   ├── generate-docs.js           # regenerates the manifest-driven tables in site/docs/
+│   └── check-published-docs.js    # fetches the LIVE site; asserts every harness page and every link resolves
 ├── tools/
 │   └── scaffold-monorepo.js       # Phase-0 scaffolder — re-run from scratch
 └── .github/
@@ -40,8 +36,7 @@ This monorepo is intended to be developed inside `packages/cli/` and `site/`.
 The orchestrating `package.json` here exposes workspace-aware scripts:
 
 ```bash
-npm run generate-docs -- --check   # verify docs site tables are manifest-driven
-npm run sync-docs     -- --check   # every site/ page has a site/docs/ mirror (fails if not)
+npm run generate-docs -- --check   # verify the guide's tables match harnesses.json
 npm test                            # run the contract test suite
 npm run smoke                       # smoke gate: tests + isolated on/off rehearsal, opens report
 npm run scaffold                    # re-stamp from the source repos (deletes everything first)

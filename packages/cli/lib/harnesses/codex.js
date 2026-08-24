@@ -1,7 +1,7 @@
 // Codex — file-writable.
 //
 // Writes ~/.codex/config.toml (0600). OpenAI Responses API on
-// https://router.neosmith.ai/v1. Per site/agents/codex.md:
+// https://router.neosmith.ai/v1. Per site/docs/agents/codex.md:
 //
 //   model = "neosmith.intelligent-pro"
 //   model_provider = "neosmith"

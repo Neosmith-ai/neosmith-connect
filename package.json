@@ -9,7 +9,6 @@
   "scripts": {
     "scaffold": "node tools/scaffold-monorepo.js",
     "generate-docs": "node scripts/generate-docs.js",
-    "sync-docs": "node scripts/sync-docs-mirror.js",
     "test": "npm test --workspace packages/cli",
     "smoke": "npm --workspace packages/cli run smoke",
     "smoke:ci": "npm --workspace packages/cli run smoke:ci",

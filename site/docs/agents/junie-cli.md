@@ -34,6 +34,14 @@ A Junie profile holds **one** model — there is no catalogue field the way Open
 
 The alias keeps `--model custom:neosmith` meaning "the tier I connected with" whichever one that is; the four tier profiles let you switch inside Junie without re-running `on`. The list is generated from the NeoSmith manifest, so a new SKU appears automatically.
 
+---
+
+## Install
+
+See [junie.jetbrains.com](https://junie.jetbrains.com/docs/junie-cli.html) for the CLI install.
+
+---
+
 ## Configure
 
 ### With the NeoSmith CLI (recommended)

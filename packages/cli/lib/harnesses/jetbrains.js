@@ -6,7 +6,7 @@
 // recommended per-feature model assignments. Records an on-flag in
 // ~/.neosmith/state.json so `status`/`off` know it's connected.
 //
-// Values per site/agents/jetbrains-ai.md.
+// Values per site/docs/agents/jetbrains-ai.md.
 
 "use strict";
 
