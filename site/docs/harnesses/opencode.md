@@ -1,7 +1,7 @@
 ---
 title: OpenCode
 layout: default
-parent: Agents
+parent: Harnesses
 nav_order: 9
 ---
 

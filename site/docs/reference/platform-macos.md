@@ -1,8 +1,8 @@
 ---
 title: macOS
 layout: default
-parent: Platforms
-nav_order: 1
+parent: Reference
+nav_order: 4
 ---
 
 # Platform Setup: macOS

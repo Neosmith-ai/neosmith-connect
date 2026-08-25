@@ -87,40 +87,41 @@ function generateAgentsTable(manifest) {
   const rows = manifestHarnessesSorted(manifest).map((h) => {
     const fmt = WIRE_HUMAN[h.wire] || h.wire;
     const ep = ENDPOINT_HUMAN(h.wire, defaultEnv(manifest).baseUrl, defaultEnv(manifest).openaiBaseUrl);
-    const docRel = (h.docPage || `agents/${h.id}.md`).replace(/^\.\//, "");
+    const docRel = (h.docPage || `harnesses/${h.id}.md`).replace(/^\.\//, "");
     const label = h.shortLabel || h.name;
     return `| **${label}** | [${docRel}](${docRel}) | ${fmt} | ${ep} |`;
   });
-  return ["| Agent | Guide | Format | Endpoint |", "|---|---|---|---|", ...rows].join("\n");
+  return ["| Harness | Guide | Format | Endpoint |", "|---|---|---|---|", ...rows].join("\n");
 }
 
-function generateAgentsEndpointTable(manifest) {
+function generateHarnessesEndpointTable(manifest) {
   const rows = manifestHarnessesSorted(manifest).map((h) => {
     const fmt = WIRE_HUMAN[h.wire] || h.wire;
     const ep = ENDPOINT_HUMAN(h.wire, defaultEnv(manifest).baseUrl, defaultEnv(manifest).openaiBaseUrl);
-    const docRel = (h.docPage || `agents/${h.id}.md`).replace(/^\.\//, "");
+    const docRel = (h.docPage || `harnesses/${h.id}.md`).replace(/^\.\//, "");
     const label = h.shortLabel || h.name;
     return `| **${label}** | ${fmt} | ${ep} | [${docRel}](${docRel}) |`;
   });
-  return ["| Agent | Format | Endpoint | Guide |", "|---|---|---|---|", ...rows].join("\n");
+  return ["| Harness | Format | Endpoint | Guide |", "|---|---|---|---|", ...rows].join("\n");
 }
 
 // The Agents section index on the docs site. Hand-maintained until now, and it
 // showed it: the table still listed five agents long after copilot, zed and
 // cursor shipped in 0.3.0. Links are section-relative (Just-the-Docs strips the
-// .md), which is why this cannot reuse generateAgentsEndpointTable.
-function generateAgentsIndexTable(manifest) {
+// .md), which is why this cannot reuse generateHarnessesEndpointTable.
+function generateHarnessesIndexTable(manifest) {
   const rows = manifestHarnessesSorted(manifest).map((h) => {
     const fmt = WIRE_HUMAN[h.wire] || h.wire;
     const ep = ENDPOINT_HUMAN(h.wire, defaultEnv(manifest).baseUrl, defaultEnv(manifest).openaiBaseUrl);
-    const docRel = (h.docPage || `agents/${h.id}.md`).replace(/^\.\//, "");
-    // agents/foo.md -> foo ; ides/cursor.md -> ../ides/cursor
+    const docRel = (h.docPage || `harnesses/${h.id}.md`).replace(/^\.\//, "");
+    // Every harness page is a sibling now — harnesses/foo.md -> foo. Before the
+    // trees were flattened, Cursor lived under ides/ and needed a ../ hop.
     const slug = docRel.replace(/\.md$/, "");
-    const link = slug.startsWith("agents/") ? slug.slice("agents/".length) : `../${slug}`;
+    const link = slug.startsWith("harnesses/") ? slug.slice("harnesses/".length) : `../${slug}`;
     const label = h.shortLabel || h.name;
     return `| [${label}](${link}) | ${fmt} | \`${ep.replace(/`/g, "")}\` |`;
   });
-  return ["| Agent | Format | Endpoint |", "|---|---|---|", ...rows].join("\n");
+  return ["| Harness | Format | Endpoint |", "|---|---|---|", ...rows].join("\n");
 }
 
 // Which harnesses speak which wire format, for the endpoints reference. The
@@ -197,13 +198,13 @@ const TARGETS = [
   ],
   [
     path.join(MONOREPO_ROOT, "site", "docs", "compatibility.md"),
-    "agents-endpoint",
-    generateAgentsEndpointTable,
+    "harnesses-endpoint",
+    generateHarnessesEndpointTable,
   ],
   [
-    path.join(MONOREPO_ROOT, "site", "docs", "agents", "index.md"),
-    "agents-index",
-    generateAgentsIndexTable,
+    path.join(MONOREPO_ROOT, "site", "docs", "harnesses", "index.md"),
+    "harnesses-index",
+    generateHarnessesIndexTable,
   ],
   [
     path.join(MONOREPO_ROOT, "site", "docs", "reference", "endpoints.md"),

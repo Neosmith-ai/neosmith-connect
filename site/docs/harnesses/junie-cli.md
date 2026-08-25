@@ -1,8 +1,8 @@
 ---
 title: Junie CLI
 layout: default
-parent: Agents
-nav_order: 7
+parent: Harnesses
+nav_order: 11
 ---
 
 # Junie CLI + NeoSmith
@@ -20,7 +20,8 @@ $JUNIE_HOME/models/<profile>.json     # user scope; JUNIE_HOME defaults to ~/.ju
 .junie/models/<profile>.json          # project scope
 ```
 
-The filename without `.json` **is** the profile id.
+The filename without `.json` **is** the profile id, so the default alias lives at
+`~/.junie/models/neosmith.json` and is selected as `custom:neosmith`.
 
 A Junie profile holds **one** model — there is no catalogue field the way OpenCode and OpenClaw have. So registering every NeoSmith tier means writing a file per tier, and `neosmith junie on` writes five:
 

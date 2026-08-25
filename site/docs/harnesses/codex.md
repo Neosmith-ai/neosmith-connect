@@ -1,8 +1,8 @@
 ---
 title: Codex
 layout: default
-parent: Agents
-nav_order: 3
+parent: Harnesses
+nav_order: 2
 ---
 
 # OpenAI Codex + NeoSmith

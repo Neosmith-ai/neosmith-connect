@@ -2,7 +2,7 @@
 title: "Reference: Troubleshooting"
 layout: default
 parent: Reference
-nav_order: 2
+nav_order: 3
 ---
 
 # Reference: Troubleshooting
@@ -32,13 +32,13 @@ Common issues across all IDEs, agents, and platforms. Always start by confirming
 | Symptom | Cause | Fix |
 |---|---|---|
 | `400 Unknown model` | Sent a `gpt-*` or unsupported name | Use a `neosmith.*` SKU (`intelligent-pro`/`-basic`/`-lite`/`-maestro`) or a `claude-*` id |
-| Want cheaper routing | Using `intelligent-pro` (can escalate to Opus) | Switch to `intelligent-basic` (Sonnet-tier) or `intelligent-lite` (SLM-only) |
+| Want cheaper routing | Using `intelligent-pro` (can escalate to Opus) | Switch to `intelligent-basic` (Sonnet-tier) or `neolite` (SLM-only) |
 
 ## Cursor
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| Wrote `cursor.models.*` to `settings.json`, nothing changed | Cursor ignores those keys — native BYOK lives in an encrypted, server-synced store, not the settings file | Enter it in **Cursor → Settings → Models** (see [ides/cursor.md](../ides/cursor)), or use the Claude Code extension via `neosmith claude on` |
+| Wrote `cursor.models.*` to `settings.json`, nothing changed | Cursor ignores those keys — native BYOK lives in an encrypted, server-synced store, not the settings file | Enter it in **Cursor → Settings → Models** (see [harnesses/cursor.md](../harnesses/cursor)), or use the Claude Code extension via `neosmith claude on` |
 | No "OpenAI API Key" / "Override Base URL" option in Settings → Models | Custom OpenAI endpoints require Cursor **Pro/Ultra** (not on the free tier) | Upgrade Cursor, or use the scriptable Claude Code path (`neosmith cursor on` prints both) |
 
 ## Environment variables not picked up

@@ -1,13 +1,13 @@
 ---
 title: Windows (native)
 layout: default
-parent: Platforms
-nav_order: 3
+parent: Reference
+nav_order: 6
 ---
 
 # Platform Setup: Windows (Native)
 
-This guide covers running NeoSmith on **native Windows** (PowerShell, no WSL). If you prefer a Linux-like environment, see [Windows WSL2](windows-wsl) — recommended for most agentic workflows.
+This guide covers running NeoSmith on **native Windows** (PowerShell, no WSL). If you prefer a Linux-like environment, see [Windows WSL2](platform-wsl) — recommended for most agentic workflows.
 
 > **Recommendation:** Claude Code and most coding agents run more smoothly under **WSL2**. Use native Windows if your IDE (e.g. a JetBrains IDE or VS Code on Windows) and agent are all Windows-native, or if WSL isn't available to you.
 
@@ -90,7 +90,7 @@ curl.exe -s https://router.neosmith.ai/whoami -H "Authorization: Bearer sk-plus-
 |---|---|
 | **VS Code** | Reads user env vars at launch. Set them user-level (above), then fully restart VS Code. |
 | **JetBrains** | Reads user env vars at launch. Restart the IDE after setting them. For Path B (AI Assistant BYOM), env vars aren't needed — configure the URL in Settings directly. |
-| **Cursor / Antigravity** | Same as VS Code. |
+| **Cursor** | Same as VS Code. |
 
 > If an IDE doesn't pick up a freshly-set variable, fully **quit and relaunch** it (a window reload isn't enough — the process must restart).
 
@@ -103,7 +103,7 @@ curl.exe -s https://router.neosmith.ai/whoami -H "Authorization: Bearer sk-plus-
 | `curl` syntax errors | PowerShell `curl` = `Invoke-WebRequest` | Use `curl.exe` explicitly |
 | Var not seen by IDE | IDE started before var was set | Fully quit + relaunch IDE |
 | `npx` not found | Node not installed / not on PATH | `winget install OpenJS.NodeJS.LTS`, reopen terminal |
-| Claude Code behaves oddly | Some agent tooling assumes a POSIX shell | Consider [WSL2](windows-wsl) |
+| Claude Code behaves oddly | Some agent tooling assumes a POSIX shell | Consider [WSL2](platform-wsl) |
 
 ## Next
 

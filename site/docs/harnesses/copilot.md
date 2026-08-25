@@ -1,8 +1,8 @@
 ---
 title: Copilot Chat
 layout: default
-parent: Agents
-nav_order: 5
+parent: Harnesses
+nav_order: 6
 ---
 
 # Copilot Chat + NeoSmith
