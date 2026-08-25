@@ -64,6 +64,23 @@ function writtenBy(io, mod, model) {
     .map((f) => ({ path: f, body: fs.readFileSync(f, "utf8") }));
 }
 
+// Does the page mention this exact URL?
+//
+// NOT `text.includes(url)`. CodeQL flags that as
+// js/incomplete-url-substring-sanitization, and it is right to: a substring test
+// for "https://router.neosmith.ai" also matches
+// "https://router.neosmith.ai.attacker.example". The CLI itself refuses to make
+// that mistake — lib/env.js parses the URL and compares HOSTS precisely, with a
+// comment about this exact attack — so a test asserting the docs are correct
+// should not model it more loosely than the code does.
+//
+// Anchored on a trailing boundary, so the /v1 suffix still matches but a longer
+// host does not.
+function mentionsUrl(text, url) {
+  const escaped = url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(escaped + "(?![\\w.-])").test(text);
+}
+
 // ── the endpoint each page tells you to use ─────────────────────────────────
 
 test("docs: every harness page states the endpoint its module actually writes", () => withSandbox(() => {
@@ -75,10 +92,10 @@ test("docs: every harness page states the endpoint its module actually writes", 
     const doc = docFor(entry);
     assert.ok(doc, `${entry.id}: no doc page`);
     if (entry.wire === "anthropic-messages") {
-      assert.ok(doc.text.includes(anthropic),
+      assert.ok(mentionsUrl(doc.text, anthropic),
         `${doc.rel}: Claude Code takes the BARE host (it appends /v1/messages itself); the page must show ${anthropic}`);
     } else {
-      assert.ok(doc.text.includes(openai),
+      assert.ok(mentionsUrl(doc.text, openai),
         `${doc.rel}: an OpenAI-format client needs the /v1 suffix; the page must show ${openai}`);
     }
   }

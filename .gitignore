@@ -30,3 +30,4 @@ Thumbs.db
 # Personal scratch space — one-shot validation scripts and other tools that
 # lived alongside the repo for an investigation. Not part of the project.
 scripts/_one_shot/
+site/docs/Gemfile.lock

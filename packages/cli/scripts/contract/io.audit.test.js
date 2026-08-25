@@ -192,3 +192,53 @@ test("dry-run writes go to ~/.neosmith/dryrun/ and never to the real path", () =
   const shadows = fs.readdirSync(dryDir);
   assert.ok(shadows.length >= 1, "shadow should be present");
 }));
+
+// ── error paths must not carry key material (CodeQL js/clear-text-logging) ──
+//
+// GHAS flagged ui.js warn() and die() at HIGH severity. The taint reaches them
+// through HTTP RESPONSE objects — a response is derived from a call that took
+// the key, so `HTTP ${resp.status}` counts as key-derived — not through any key
+// actually being printed. No call site in lib/ puts a key into a warn or a die.
+//
+// Rather than dismiss it, warn/die now redact. That makes the property real
+// instead of incidental: even a future call site that interpolates a key into
+// an error message cannot leak it.
+//
+// log()/box()/ok() deliberately do NOT redact. Those are how `on` shows paste-in
+// values for a UI-driven harness and how `keys --reveal` answers what it was
+// asked. Redacting there would break the feature.
+test("ui: warn and die redact every key shape NeoSmith issues", () => {
+  const ui = require("../../lib/ui");
+  const SAMPLES = [
+    "sk-plus-dinesh-0FkHubwv",
+    "sk-std-abc123def456xyz",
+    "sk-slm-zzz999aaa111",
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
+  ];
+  for (const secret of SAMPLES) {
+    const out = ui.redact(`something failed: ${secret} <- here`);
+    assert.ok(!out.includes(secret), `redact() let ${secret.slice(0, 10)}… through`);
+    assert.match(out, /redacted\(\d+\)/, "and it should say something was removed, not silently vanish");
+  }
+});
+
+test("ui: redaction leaves ordinary error text alone", () => {
+  const ui = require("../../lib/ui");
+  const msg = "Key rejected (HTTP 401). Run `neosmith login` to re-authenticate.";
+  assert.equal(ui.redact(msg), msg,
+    "a message with no key in it must come through untouched — over-redacting makes errors unreadable");
+});
+
+test("ui: log and box do NOT redact, because printing the key is their job", () => {
+  const ui = require("../../lib/ui");
+  const secret = "sk-plus-dinesh-0FkHubwv";
+  const lines = [];
+  const orig = console.log;
+  console.log = (...a) => lines.push(a.join(" "));
+  try {
+    ui.box([`  API Key:  ${secret}`]);
+  } finally { console.log = orig; }
+  assert.ok(lines.join("\n").includes(secret),
+    "`neosmith cline on` prints the key for you to paste into a UI-driven tool; " +
+    "redacting here would break the one thing that screen is for");
+});
