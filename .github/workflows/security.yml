@@ -146,6 +146,13 @@ jobs:
           # Copyleft licences would make the MIT licence on the published
           # package a lie. Fail loudly rather than ship an incompatible tree.
           deny-licenses: GPL-2.0, GPL-3.0, AGPL-1.0, AGPL-3.0, SSPL-1.0
+          # …with one exception. This action reviews GitHub Actions as
+          # dependencies too, and TruffleHog OSS is AGPL-3.0. A CI tool that
+          # merely RUNS against the source is not linked into the published
+          # package and does not reach a user's machine — the deny list above
+          # exists to protect what ships to npm, not to pick our scanners. Left
+          # unlisted, the gate would reject its own sibling job.
+          allow-dependencies-licenses: pkg:githubactions/trufflesecurity/trufflehog
           comment-summary-in-pr: on-failure
 
   # ── known vulnerabilities in the shipped tree ──────────────────────────────
@@ -201,7 +208,16 @@ jobs:
           actionlint --version
 
       # Syntax, expression typing, shellcheck over every `run:` block.
+      #
+      # --severity=warning suppresses shellcheck's `info` notes. Those are
+      # style opinions, and two of them are wrong about this repo specifically:
+      # SC2016 fires on every `node -e '...'` block, where single quotes are
+      # exactly right because the shell must NOT expand what Node is about to
+      # parse. A gate that is noisy on correct code teaches people to ignore it.
+      # Warnings and errors — the ones that indicate an actual bug — still fail.
       - name: actionlint
+        env:
+          SHELLCHECK_OPTS: --severity=warning
         run: actionlint -color
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
