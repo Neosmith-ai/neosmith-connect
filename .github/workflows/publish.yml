@@ -1,3 +1,20 @@
+# Publish @neosmithai/cli to npm.
+#
+# This workflow can put code on every user's machine, which makes the tag that
+# triggers it the highest-value write in the repository. Three controls sit
+# between a tag and a published package:
+#
+#   1. A TAG RULESET restricts who may create a `v*` tag at all.
+#   2. The `npm-publish` ENVIRONMENT requires a maintainer to approve the
+#      deployment, and NPM_TOKEN is an environment secret scoped to it — not a
+#      repository secret readable by any job in any workflow.
+#   3. The ancestry check below refuses to publish a commit that is not on
+#      `main`, so a tag pointing at an unreviewed commit fails before npm is
+#      contacted.
+#
+# Any one of these can be bypassed by a determined maintainer. All three
+# together mean it cannot happen by accident, which is the realistic threat.
+
 name: publish
 
 on:
@@ -8,15 +25,55 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    # Requires a maintainer to approve the deployment. NPM_TOKEN lives on this
+    # environment, so no other job — present or future — can read it.
+    environment:
+      name: npm-publish
+      url: https://www.npmjs.com/package/@neosmithai/cli
     permissions:
       contents: read
+      # OIDC token for `npm publish --provenance`.
       id-token: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # No GITHUB_TOKEN left in .git/config after checkout. The `git fetch`
+          # in the ancestry check below still works because this repository is
+          # public and an anonymous HTTPS fetch is enough. If it is ever made
+          # private, that step needs credentials back.
+          persist-credentials: false
+          # The ancestry check needs real history, and a tag push checks out at
+          # depth 1 by default.
+          fetch-depth: 0
+
+      # No `cache:` input is set, so setup-node restores nothing — there is no
+      # cache for a less-trusted ref to poison. zizmor flags the action by its
+      # presence in a publishing workflow, at Low confidence; the suppression is
+      # in .github/zizmor.yml with this reasoning. Adding a cache here would
+      # make the finding real, so: do not.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
+
+      # A tag is just a pointer. Nothing stopped someone tagging a commit that
+      # had never been reviewed, or one from an abandoned branch, and this
+      # workflow would have published it. `main` is protected and requires
+      # review, so "reachable from main" is the cheapest available proof that a
+      # human approved this code.
+      - name: The tagged commit is on main
+        run: |
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$GITHUB_SHA is not an ancestor of origin/main — refusing to publish."
+            {
+              echo "Tag \`$GITHUB_REF_NAME\` points at a commit that is not on main."
+              echo "Publishing it would ship code that never passed review."
+              echo "Delete the tag, merge the change to main, and tag the merge commit."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
       - name: Sanity check — tag matches package.json version
         run: |
           PKG_VER=$(node -p "require('./packages/cli/package.json').version")
@@ -74,9 +131,14 @@ jobs:
               DIST_TAG=latest ;;
           esac
           echo "publishing $TAG_VER to dist-tag '$DIST_TAG'"
-          # Provenance (--provenance) requires GitHub's OIDC token provider,
-          # which has been intermittently unavailable during the Aug 6 2026
-          # Actions outage. Re-enable once GitHub stabilizes.
-          npm publish --access public --tag "$DIST_TAG"
+          # --provenance signs an attestation linking this exact tarball to this
+          # exact workflow run and commit, verifiable by anyone with
+          # `npm audit signatures`. It is the single strongest signal a consumer
+          # has that the package on npm came from this repository.
+          #
+          # It was disabled during the Aug 6 2026 Actions outage, when the OIDC
+          # token provider was intermittently unavailable. That is long resolved
+          # and `id-token: write` is declared above.
+          npm publish --access public --provenance --tag "$DIST_TAG"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

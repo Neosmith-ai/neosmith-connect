@@ -1,5 +1,11 @@
 # NeoSmith Connect
 
+[![test](https://github.com/Neosmith-ai/neosmith-connect/actions/workflows/test.yml/badge.svg)](https://github.com/Neosmith-ai/neosmith-connect/actions/workflows/test.yml)
+[![security](https://github.com/Neosmith-ai/neosmith-connect/actions/workflows/security.yml/badge.svg)](https://github.com/Neosmith-ai/neosmith-connect/actions/workflows/security.yml)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/Neosmith-ai/neosmith-connect/badge)](https://scorecard.dev/viewer/?uri=github.com/Neosmith-ai/neosmith-connect)
+[![npm](https://img.shields.io/npm/v/@neosmithai/cli)](https://www.npmjs.com/package/@neosmithai/cli)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 Monorepo for NeoSmith's CLI and developer-facing guide. A single
 `harnesses.json` manifest drives both:
 
@@ -46,6 +52,22 @@ See **[CONTRIBUTING.md](CONTRIBUTING.md)** for the full development guide —
 building the CLI package locally with `npm pack`, installing and testing it
 exactly as a customer receives it (no registry upload), testing against a
 throwaway HOME, the test suite, and the release process.
+
+## Contributing
+
+Fork, branch, open a pull request against `main`. `main` is protected — nobody
+pushes to it directly, including maintainers.
+
+- **[CONTRIBUTING.md § How to contribute](CONTRIBUTING.md#how-to-contribute)** —
+  the five commands from fork to pull request, what CI runs, what a reviewer
+  looks for.
+- **[GOVERNANCE.md](GOVERNANCE.md)** — who maintains this, how decisions get
+  made, which paths need a conversation before code.
+- **[SECURITY.md](SECURITY.md)** — found a security bug? Report it privately.
+  Please do not open a public issue.
+- **[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)** · **[MAINTAINERS.md](MAINTAINERS.md)**
+
+Licensed [MIT](LICENSE).
 
 ## Filing feedback or an issue
 

@@ -1,0 +1,75 @@
+# Dependabot — dependency updates for every ecosystem this repo actually uses.
+#
+# Three ecosystems, four directories:
+#   npm            /              the workspace root (no runtime deps, but the
+#                                 lockfile is real and can carry advisories)
+#   npm            /packages/cli  the PUBLISHED package — smol-toml and yaml
+#                                 ship to every user, so this is the one that
+#                                 matters
+#   github-actions /              pins in .github/workflows/*.yml, including the
+#                                 SHA-pinned third-party actions
+#   bundler        /site/docs     Jekyll + github-pages, used by pages.yml
+#
+# Minor and patch updates are grouped into one PR per ecosystem per week so the
+# review queue stays readable. Majors come through alone — they need a human to
+# read the changelog.
+
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    labels: [dependencies]
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /packages/cli
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    labels: [dependencies, cli]
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(ci)"
+    labels: [dependencies, ci]
+    groups:
+      actions:
+        update-types: [minor, patch]
+
+  - package-ecosystem: bundler
+    directory: /site/docs
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "chore(docs)"
+    labels: [dependencies, docs]
+    # Ruby 3.1 + the github-pages gem pin Jekyll to 3.x on purpose — pages.yml
+    # documents why. Let Dependabot offer patches, not a Jekyll 4 major.
+    ignore:
+      - dependency-name: jekyll
+        update-types: [version-update:semver-major]
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]

@@ -1,0 +1,42 @@
+# CODEOWNERS — who must approve a change to each path.
+#
+# The `main` ruleset has "require review from Code Owners" turned on, so an
+# entry here is enforced, not advisory. Last matching pattern wins, so the
+# narrow rules at the bottom override the catch-all at the top.
+#
+# Every owner listed must be a member of the team, or GitHub silently treats
+# the rule as unowned and the review requirement does not fire.
+
+# ── everything ─────────────────────────────────────────────────────────────
+*                                       @Neosmith-ai/maintainers
+
+# ── CI and credentials ─────────────────────────────────────────────────────
+# These workflows hold NEOSMITH_STAGING_KEY and NPM_TOKEN. A change here is a
+# change to who can spend money and publish packages.
+/.github/                               @Neosmith-ai/maintainers
+/.github/workflows/                     @Neosmith-ai/maintainers
+/.gitleaks.toml                         @Neosmith-ai/maintainers
+
+# ── the router contract and the commercial manifest ────────────────────────
+# router-contract.v1.json is versioned on both sides; harnesses.json carries
+# base URLs and SKU ids. See GOVERNANCE.md § What is open to contribution.
+/packages/cli/contract/                 @Neosmith-ai/maintainers
+/packages/cli/harnesses.json            @Neosmith-ai/maintainers
+
+# ── key handling ───────────────────────────────────────────────────────────
+# key.js reads and writes the user's API key; ui.js is where it gets rendered,
+# and is where CodeQL has already caught two clear-text-logging bugs.
+/packages/cli/lib/key.js                @Neosmith-ai/maintainers
+/packages/cli/lib/ui.js                 @Neosmith-ai/maintainers
+
+# ── install scripts ────────────────────────────────────────────────────────
+# Piped into a shell by users. Treated as security-relevant surface.
+/packages/cli/install.sh                @Neosmith-ai/maintainers
+/packages/cli/install.ps1               @Neosmith-ai/maintainers
+
+# ── legal and policy ───────────────────────────────────────────────────────
+/LICENSE                                @Neosmith-ai/maintainers
+/SECURITY.md                            @Neosmith-ai/maintainers
+/GOVERNANCE.md                          @Neosmith-ai/maintainers
+/MAINTAINERS.md                         @Neosmith-ai/maintainers
+/CODE_OF_CONDUCT.md                     @Neosmith-ai/maintainers
