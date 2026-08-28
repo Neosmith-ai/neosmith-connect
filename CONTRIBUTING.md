@@ -5,6 +5,7 @@ it exactly as a customer would receive it, and get your change merged.
 
 For *using* the CLI, see [`packages/cli/README.md`](packages/cli/README.md).
 
+- [How to contribute](#how-to-contribute)
 - [Prerequisites](#prerequisites)
 - [Repo layout](#repo-layout)
 - [Build the complete npm package locally](#build-the-complete-npm-package-locally)
@@ -16,6 +17,101 @@ For *using* the CLI, see [`packages/cli/README.md`](packages/cli/README.md).
 - [Tests](#tests)
 - [Adding a command, harness, or flag](#adding-a-command-harness-or-flag)
 - [Releasing](#releasing)
+
+---
+
+## How to contribute
+
+Every change reaches `main` the same way, whether it comes from a NeoSmith
+engineer or from someone who has never touched this repository:
+
+```
+fork  →  branch on your fork  →  pull request against main  →  review  →  squash merge
+```
+
+You do **not** need — and will not be given — push access to
+`Neosmith-ai/neosmith-connect`. `main` is protected against direct pushes for
+everyone, maintainers included. That is deliberate; see
+[GOVERNANCE.md](GOVERNANCE.md) for why, and for who decides what.
+
+### Your first pull request
+
+```bash
+# 1. Fork on GitHub, then clone YOUR fork
+git clone https://github.com/<you>/neosmith-connect.git
+cd neosmith-connect
+git remote add upstream https://github.com/Neosmith-ai/neosmith-connect.git
+
+# 2. Branch. fix/… feat/… docs/… chore/… — the prefix is the change type.
+git checkout -b fix/codex-config-on-windows
+
+# 3. Install the CLI's dependencies (the root workspace has none of its own)
+npm install --workspace packages/cli
+
+# 4. Make the change, then run the gate. This is the same suite CI runs.
+npm run smoke
+
+# 5. Push to your fork and open the pull request
+git push -u origin fix/codex-config-on-windows
+```
+
+Opt into the pre-push hook once and step 4 stops being something you have to
+remember:
+
+```bash
+npm run install-hook
+```
+
+### What CI will run on your pull request
+
+None of these need secrets, so a fork pull request gets exactly the same signal
+a maintainer's branch does. All of them must pass before a maintainer can merge.
+
+| Workflow | What it checks |
+|---|---|
+| `test.yml` | Contract suite + `smoke:ci` + offline e2e across Linux/macOS/Windows × Node 18/20, plus the tarball install |
+| `security.yml` | Secret scanning (TruffleHog + gitleaks against NeoSmith's own key shapes), dependency review, `npm audit`, and a security lint of the workflows themselves |
+| CodeQL | Static analysis of the JavaScript, via GitHub's default setup |
+| `pages.yml` | Only on `main` — but `test.yml` runs `generate-docs.js --check`, so docs drift fails your PR |
+
+`e2e-staging.yml` — the one that drives real Claude Code and Codex binaries
+against the live staging router — does **not** run on fork pull requests. It
+needs a credential, and credentials are never exposed to a fork. A maintainer
+runs it after review. Nothing is expected of you there.
+
+### What a reviewer looks for
+
+- **A test for the change.** New command, harness, or flag → a test in
+  `packages/cli/scripts/contract/`. See
+  [Adding a command, harness, or flag](#adding-a-command-harness-or-flag).
+- **No credentials anywhere.** Not in code, tests, fixtures, screenshots, or
+  commit messages. If you need a key-shaped string in a test, keep the suffix
+  under 12 characters (`sk-plus-test-aaaa`) — that is below the threshold the
+  secret scanners flag.
+- **New files are in the `files` allowlist** in `packages/cli/package.json`.
+  Miss this and the code works on your machine and is absent from the published
+  package — the most common bug this repo has shipped.
+- **`harnesses.json` changes come with regenerated docs.** Run
+  `node scripts/generate-docs.js` and commit the result.
+- **Behaviour, not just intent.** The commit message should say what is
+  different after the merge, not what you were trying to do.
+
+Some paths need a conversation before code: the router contract, the commercial
+entries in `harnesses.json`, and the workflows. They are listed in
+[GOVERNANCE.md](GOVERNANCE.md#what-is-open-to-contribution-and-what-is-not).
+Open an issue first and you will not waste an afternoon.
+
+### Also worth reading
+
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — how we expect people to treat each
+  other here.
+- [SECURITY.md](SECURITY.md) — **found a security bug? Do not open an issue.**
+  Report it privately; that document says how.
+- [GOVERNANCE.md](GOVERNANCE.md) — who maintains this, how decisions get made,
+  and how someone becomes a maintainer.
+
+The rest of this document is the development guide: how to build the package
+locally, test it the way a customer receives it, and cut a release.
 
 ---
 

@@ -1,0 +1,134 @@
+# gitleaks configuration — NeoSmith-specific secret shapes.
+#
+# GitHub's own secret scanning is already enabled on this repo (with push
+# protection), and it catches the well-known partner patterns: npm tokens, AWS
+# keys, GitHub PATs. It does NOT know what a NeoSmith key looks like, because
+# nobody has registered `sk-plus-` with GitHub as a partner pattern.
+#
+# That is the entire reason this file exists. The rules below describe the key
+# shapes THIS product mints — the same ones `packages/cli/lib/key.js` parses and
+# `packages/cli/lib/ui.js` redacts — so that a real key committed by accident is
+# caught in CI even though GitHub's scanner shrugs at it.
+#
+# The regexes are deliberately kept in sync with three places:
+#   packages/cli/lib/key.js:21-24        · what the CLI accepts
+#   packages/cli/lib/ui.js               · what the CLI redacts on stderr
+#   .github/workflows/e2e-staging.yml    · what CI scrubs out of artifacts
+# If you add a key tier, add it in all four.
+#
+# Run locally:  gitleaks detect --config .gitleaks.toml --redact --verbose
+#
+# NOTE: gitleaks uses Go's RE2 engine. No lookahead, no lookbehind, no
+# backreferences — if a pattern below looks clumsier than it needs to be, that
+# is why.
+
+title = "NeoSmith Connect"
+
+# Keep every upstream gitleaks rule (AWS, GCP, Slack, npm, Stripe, private keys,
+# …) and add ours on top. Turning this off would trade a hundred good rules for
+# five.
+[extend]
+useDefault = true
+
+# ── NeoSmith API keys ──────────────────────────────────────────────────────
+#
+# Three live tiers plus one that is landing on a branch. The suffix is at least
+# 12 characters of key material: shorter than that and it is a placeholder like
+# `sk-plus-test-key`, not a credential. That threshold is what keeps the
+# contract-test fixtures from drowning the signal — see the allowlist below for
+# the ones that are longer.
+
+[[rules]]
+id = "neosmith-api-key"
+description = "NeoSmith router API key (sk-plus / sk-std / sk-slm / sk-maestro)"
+regex = '''\bsk-(?:plus|std|slm|maestro)-[A-Za-z0-9_-]{12,}\b'''
+keywords = ["sk-plus-", "sk-std-", "sk-slm-", "sk-maestro-"]
+entropy = 3.0
+tags = ["key", "neosmith"]
+
+# ── Cognito JWTs ───────────────────────────────────────────────────────────
+#
+# `neosmith login` accepts a Cognito JWT as an alternative to an sk- key
+# (key.js:24). A full three-segment JWT in the tree is a credential; the bare
+# `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9` header on its own is just the string
+# "{"alg":"HS256","typ":"JWT"}" base64'd and appears in tests as a shape
+# example, so all three segments are required to match.
+
+[[rules]]
+id = "neosmith-cognito-jwt"
+description = "Cognito JWT accepted by `neosmith login`"
+regex = '''\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}'''
+keywords = ["eyJ"]
+tags = ["jwt", "neosmith"]
+
+# ── harness credentials sitting in config files ────────────────────────────
+#
+# `neosmith <harness> on` writes the key into the harness's own config. Those
+# files live under the user's HOME and must never be committed — but a
+# contributor debugging a harness integration can easily paste one into an
+# issue reproduction or a fixture. These rules catch the assignment form.
+
+[[rules]]
+id = "anthropic-auth-token-assignment"
+description = "ANTHROPIC_AUTH_TOKEN / ANTHROPIC_API_KEY with a value"
+regex = '''(?i)\bANTHROPIC_(?:AUTH_TOKEN|API_KEY)\b["'\s]*[:=]\s*["']?([A-Za-z0-9_\-]{16,})["']?'''
+secretGroup = 1
+keywords = ["anthropic_auth_token", "anthropic_api_key"]
+tags = ["key", "harness"]
+
+[[rules]]
+id = "openai-api-key-assignment"
+description = "OPENAI_API_KEY with a value (Codex reads the NeoSmith key from here)"
+regex = '''(?i)\bOPENAI_API_KEY\b["'\s]*[:=]\s*["']?([A-Za-z0-9_\-]{16,})["']?'''
+secretGroup = 1
+keywords = ["openai_api_key"]
+tags = ["key", "harness"]
+
+[[rules]]
+id = "neosmith-secret-assignment"
+description = "A NEOSMITH_* variable assigned a literal secret"
+regex = '''(?i)\bNEOSMITH_[A-Z_]*(?:KEY|TOKEN|SECRET)\b["'\s]*[:=]\s*["']?([A-Za-z0-9_\-]{16,})["']?'''
+secretGroup = 1
+keywords = ["neosmith_"]
+tags = ["key", "neosmith"]
+
+# ── global allowlist ───────────────────────────────────────────────────────
+#
+# Two categories only: paths whose entire purpose is to contain fake keys, and
+# specific literal fixtures that are long enough to trip the entropy rule.
+#
+# Adding a path here is a real decision — it turns the scanner off for that
+# path permanently. Prefer shortening the fixture to under 12 characters of
+# suffix, which no rule matches, over adding an allowlist entry.
+
+[allowlist]
+description = "Test fixtures and generated documentation examples"
+
+paths = [
+  # The contract suite asserts on redaction behaviour, so it must contain
+  # key-shaped strings by construction. See io.audit.test.js:210.
+  '''packages/cli/scripts/contract/.*\.test\.js$''',
+  # The offline e2e mock and driver, same reasoning — no network, no real key.
+  '''packages/cli/scripts/e2e/.*\.js$''',
+  # Local smoke-run artifacts. Already gitignored via packages/cli/.gitignore;
+  # listed so a `gitleaks detect --no-git` on a dirty tree stays quiet.
+  '''packages/cli/\.smoke/''',
+  '''packages/cli/\.sandbox/''',
+  # This file. Every regex above contains the literal `sk-plus-` etc.
+  '''\.gitleaks\.toml$''',
+  # The workflow that scrubs keys names the shapes it scrubs.
+  '''\.github/workflows/e2e-staging\.yml$''',
+]
+
+regexes = [
+  # Documentation placeholders. These are printed in the guide and in
+  # CONTRIBUTING.md to show users what a key looks like.
+  '''sk-(?:plus|std|slm|maestro)-yourname-x+''',
+  '''sk-(?:plus|std|slm|maestro)-smoke-X+''',
+  # Contract fixtures built from a repeated character — `sk-slm-test-aaaaaaaa`
+  # and friends. Real key material does not look like this, and the entropy
+  # threshold alone does not reliably exclude it.
+  '''sk-(?:plus|std|slm|maestro)-[a-z-]*(?:a{4,}|b{4,}|c{4,}|z{3,}\d)''',
+  # The bare JWT header used as a shape example in key.js and its tests.
+  '''eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9''',
+]

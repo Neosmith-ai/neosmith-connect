@@ -1,0 +1,21 @@
+# zizmor configuration — GitHub Actions security audit.
+#
+# Run in CI by .github/workflows/security.yml:
+#   zizmor --persona=regular --min-severity=medium .github/workflows/
+#
+# Every entry below is a suppression, and a suppression is a claim that the
+# audit is wrong ABOUT THIS CASE. Each one carries the reasoning, because a
+# bare ignore list decays into "things that were annoying once".
+
+rules:
+  cache-poisoning:
+    ignore:
+      # publish.yml uses actions/setup-node with NO `cache:` input, so nothing
+      # is restored from a cache and there is nothing to poison. zizmor's
+      # heuristic is "setup-* action present in a workflow that publishes
+      # artifacts", which it reports at Low confidence.
+      #
+      # This suppression is scoped to the file, not global. If a `cache:` input
+      # is ever added here the finding becomes real — delete this entry rather
+      # than widening it.
+      - publish.yml

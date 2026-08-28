@@ -56,7 +56,14 @@ on:
     types: [opened, synchronize, reopened]
 
 # Never pull_request_target — that is the canonical way a staging key leaks
-# from a fork.
+# from a fork. `pull_request` runs the fork's code with the fork's (empty)
+# secrets; `pull_request_target` runs it with OURS.
+#
+# The second control is the `staging-e2e` environment on the `e2e` job below.
+# The trigger keeps forks out; the environment keeps a same-repo branch out
+# until a maintainer has read the diff and approved the deployment. Both are
+# needed: the trigger alone stops working the moment anyone is granted write
+# access, and this workflow executes code from the PR head commit.
 permissions:
   contents: read
 
@@ -72,80 +79,42 @@ jobs:
   # A staging blip must not turn every PR red — a workflow that cries wolf gets
   # ignored inside a week. So: scheduled runs FAIL on an unhealthy staging
   # (that is a real alert), while PR runs skip the matrix with a neutral note.
+  #
+  # THIS JOB DELIBERATELY HOLDS NO SECRET. It used to authenticate against
+  # /whoami, which meant the staging key was handed to two jobs per run instead
+  # of one — and, once the `e2e` job moved behind an environment reviewer, it
+  # would have meant two approval prompts for one run. /ready is unauthenticated
+  # and answers the only question preflight actually asks: is staging up? The
+  # authenticated checks moved into `e2e`, which holds the key anyway.
   preflight:
     name: staging reachable?
     runs-on: ubuntu-latest
     outputs:
       healthy: ${{ steps.check.outputs.healthy }}
-      have_key: ${{ steps.check.outputs.have_key }}
-    # Same-repo only. Fork PRs never receive secrets, so the no-key path
-    # below is what they hit; the matrix is not gated on a label any
-    # more — e2e-staging runs on every PR by design.
+    # Same-repo only. A fork PR skips this job, so `healthy` is empty, so every
+    # downstream job is skipped too — the fork never reaches the environment
+    # gate, let alone the secret behind it.
     if: >-
       github.event_name != 'pull_request' ||
       github.event.pull_request.head.repo.full_name == github.repository
     steps:
-      # On a same-repo PR we either see the secret or the workflow is
-      # misconfigured at the repo level. Detect no-key first and emit
-      # have_key=false cleanly, so the rest of the job can decide what
-      # to do (the fork-PR skip step below). The real curl probes run
-      # only when we actually have a key.
-      - id: detect
-        if: github.event_name == 'pull_request'
-        env:
-          KEY: ${{ secrets.NEOSMITH_STAGING_KEY }}
-        run: |
-          if [ -z "$KEY" ]; then
-            echo "have_key=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::PR run with no staging key — fork or secret not propagated."  >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - id: check
-        if: github.event_name != 'pull_request' || steps.detect.outputs.have_key != 'false'
-        env:
-          KEY: ${{ secrets.NEOSMITH_STAGING_KEY }}
         run: |
           set +e
           BASE=$(node -p "require('./packages/cli/harnesses.json').environments['${E2E_ENV}'].baseUrl")
           echo "base=$BASE"
 
-          if [ -z "$KEY" ]; then
-            echo "have_key=false" >> "$GITHUB_OUTPUT"
-            echo "::error::NEOSMITH_STAGING_KEY is not configured — this workflow cannot run."
-            echo "Mint an sk-slm-* key (cheapest tier, and covered by the CLI's audit redaction)," >> "$GITHUB_STEP_SUMMARY"
-            echo "with a small dev_hard_ceiling_tokens, and add it as a repo secret." >> "$GITHUB_STEP_SUMMARY"
-            exit 1
-          fi
-          echo "have_key=true" >> "$GITHUB_OUTPUT"
-
           READY=$(curl -s -o /dev/null -w "%{http_code}" --max-time 20 "$BASE/ready")
-          WHO=$(curl -s -o /dev/null -w "%{http_code}" --max-time 20 \
-                 -H "Authorization: Bearer $KEY" "$BASE/whoami")
-          echo "ready=$READY whoami=$WHO"
+          echo "ready=$READY"
 
-          if [ "$READY" = "200" ] && [ "$WHO" = "200" ]; then
+          if [ "$READY" = "200" ]; then
             echo "healthy=true" >> "$GITHUB_OUTPUT"
           else
             echo "healthy=false" >> "$GITHUB_OUTPUT"
-            echo "$BASE is unhealthy (ready=$READY whoami=$WHO)" >> "$GITHUB_STEP_SUMMARY"
-          fi
-      # Confirm the router agrees about which environment answered. A stale DNS
-      # entry or a proxy returns a healthy 200 from the WRONG deployment, and
-      # no amount of client-side hostname matching can detect that — which is
-      # why /whoami carries `environment`.
-      - name: The responding router is the environment we asked for
-        if: steps.check.outputs.healthy == 'true'
-        env:
-          KEY: ${{ secrets.NEOSMITH_STAGING_KEY }}
-        run: |
-          BASE=$(node -p "require('./packages/cli/harnesses.json').environments['${E2E_ENV}'].baseUrl")
-          ANSWERED=$(curl -s --max-time 20 -H "Authorization: Bearer $KEY" "$BASE/whoami" \
-                     | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).environment || 'missing'")
-          echo "asked for '${E2E_ENV}', $BASE answered '$ANSWERED'"
-          if [ "$ANSWERED" != "${E2E_ENV}" ] && [ "$ANSWERED" != "missing" ]; then
-            echo "::error::Asked for ${E2E_ENV} but $BASE identifies as '$ANSWERED'."
-            exit 1
+            echo "$BASE is unhealthy (ready=$READY)" >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Staging is down — skipping (PR run)
@@ -158,12 +127,6 @@ jobs:
           echo "::error::${E2E_ENV} is unreachable on a scheduled run. This is a real alert."
           exit 1
 
-      - name: Fork PR or missing secret — skipping (PR run)
-        if: github.event_name == 'pull_request' && steps.check.outputs.have_key != 'true'
-        run: |
-          echo "::notice::No staging key made it to this PR — fork or secret not propagated. Skipping the e2e matrix without failing the PR."
-          exit 0
-
   # ── pack ───────────────────────────────────────────────────────────────────
   # Build the tarball ONCE and assert its contents before spending a cent on
   # inference. The matrix installs this artifact, so the published package —
@@ -174,8 +137,10 @@ jobs:
     if: needs.preflight.outputs.healthy == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with: {node-version: "20"}
       - name: Install deps
         working-directory: packages/cli
@@ -189,18 +154,33 @@ jobs:
       - name: Pack
         working-directory: packages/cli
         run: npm pack --pack-destination "$RUNNER_TEMP"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: cli-tarball
           path: ${{ runner.temp }}/neosmithai-cli-*.tgz
           retention-days: 3
 
   # ── the real thing ─────────────────────────────────────────────────────────
+  # This is the ONLY job in the repository that touches NEOSMITH_STAGING_KEY,
+  # and it runs code checked out from the pull request's head commit. Those two
+  # facts together are the whole reason for the environment gate below.
+  #
+  # NEOSMITH_STAGING_KEY is an ENVIRONMENT secret on `staging-e2e`, not a
+  # repository secret. That distinction is load-bearing: a repository secret is
+  # readable by any job in any workflow, so the reviewer prompt would be
+  # decorative — a contributor could simply add a second job that reads it. As
+  # an environment secret it is unreachable except from a job that declares
+  # `environment: staging-e2e`, and such a job does not start until a maintainer
+  # has approved the deployment, having read the diff.
+  #
+  # The same-repo guard on `preflight` is the outer layer; this is the inner
+  # one. A fork PR never gets here at all.
   e2e:
     name: ${{ matrix.os }} · real harnesses
     needs: [preflight, pack]
     if: needs.preflight.outputs.healthy == 'true'
     runs-on: ${{ matrix.os }}
+    environment: staging-e2e
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -209,14 +189,61 @@ jobs:
         # everything that does not need a real harness binary.
         os: [macos-latest, windows-latest]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with: {node-version: "20"}
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: cli-tarball
           path: ${{ runner.temp }}/tarball
+
+      # These two checks lived in `preflight` until the environment gate landed.
+      # They need the key, and this is now the only job that has it.
+      #
+      # A key that has been rotated or revoked produces a run that fails deep
+      # inside a harness with an unhelpful message; asking /whoami first turns
+      # that into one clear line.
+      - name: The staging key still works
+        shell: bash
+        env:
+          KEY: ${{ secrets.NEOSMITH_STAGING_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "::error::NEOSMITH_STAGING_KEY is not set on the staging-e2e environment."
+            {
+              echo "Mint an sk-slm-* key (cheapest tier, and covered by the CLI's audit redaction),"
+              echo "give it a small dev_hard_ceiling_tokens, and add it as an ENVIRONMENT secret"
+              echo "on \`staging-e2e\` — not as a repository secret."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          BASE=$(node -p "require('./packages/cli/harnesses.json').environments['${E2E_ENV}'].baseUrl")
+          WHO=$(curl -s -o /dev/null -w "%{http_code}" --max-time 20                  -H "Authorization: Bearer $KEY" "$BASE/whoami")
+          echo "whoami=$WHO"
+          if [ "$WHO" != "200" ]; then
+            echo "::error::$BASE/whoami returned $WHO — the staging key is rejected or expired."
+            exit 1
+          fi
+
+      # Confirm the router agrees about which environment answered. A stale DNS
+      # entry or a proxy returns a healthy 200 from the WRONG deployment, and
+      # no amount of client-side hostname matching can detect that — which is
+      # why /whoami carries `environment`.
+      - name: The responding router is the environment we asked for
+        shell: bash
+        env:
+          KEY: ${{ secrets.NEOSMITH_STAGING_KEY }}
+        run: |
+          BASE=$(node -p "require('./packages/cli/harnesses.json').environments['${E2E_ENV}'].baseUrl")
+          ANSWERED=$(curl -s --max-time 20 -H "Authorization: Bearer $KEY" "$BASE/whoami"                      | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).environment || 'missing'")
+          echo "asked for '${E2E_ENV}', $BASE answered '$ANSWERED'"
+          if [ "$ANSWERED" != "${E2E_ENV}" ] && [ "$ANSWERED" != "missing" ]; then
+            echo "::error::Asked for ${E2E_ENV} but $BASE identifies as '$ANSWERED'."
+            exit 1
+          fi
 
       - name: Install the CLI from the tarball
         shell: bash
@@ -241,15 +268,24 @@ jobs:
       - name: Install the real harness binaries
         id: harnesses
         shell: bash
+        # The dispatch inputs go through `env:`, never straight into the `run:`
+        # block. A `${{ }}` expansion is textual substitution BEFORE the shell
+        # ever sees the script, so a version string containing a quote and a
+        # semicolon becomes shell code. Only maintainers can dispatch this
+        # workflow, which caps the blast radius but does not make the pattern
+        # safe — and `harnesses` below has the same shape.
+        env:
+          CLAUDE_VERSION: ${{ inputs.claude_version || 'latest' }}
+          CODEX_VERSION: ${{ inputs.codex_version || 'latest' }}
         run: |
           install_one() {
             npm install -g "$1" || { echo "retrying $1"; sleep 10; npm install -g "$1"; }
           }
-          if ! install_one "@anthropic-ai/claude-code@${{ inputs.claude_version || 'latest' }}"; then
+          if ! install_one "@anthropic-ai/claude-code@${CLAUDE_VERSION}"; then
             echo "::error::Claude Code failed to install — this is a runner/upstream problem, NOT a CLI bug."
             exit 1
           fi
-          if ! install_one "@openai/codex@${{ inputs.codex_version || 'latest' }}"; then
+          if ! install_one "@openai/codex@${CODEX_VERSION}"; then
             echo "::error::Codex failed to install — this is a runner/upstream problem, NOT a CLI bug."
             exit 1
           fi
@@ -270,9 +306,11 @@ jobs:
           # setx (what the CLI correctly prints on Windows) does not affect the
           # current process, so CI must export it itself.
           OPENAI_API_KEY: ${{ secrets.NEOSMITH_STAGING_KEY }}
+          # Via env, not inline — see the note on the install step above.
+          HARNESS_LIST: ${{ inputs.harnesses || 'all' }}
         run: |
           set +e
-          LIST="${{ inputs.harnesses || 'all' }}"
+          LIST="${HARNESS_LIST}"
           if [ "$LIST" = "all" ]; then
             LIST="claude,codex,continue,zed,copilot,cline,jetbrains,cursor"
           fi
@@ -319,13 +357,19 @@ jobs:
               const fs=require("fs");const [f,key]=process.argv.slice(1);
               let s;try{s=fs.readFileSync(f,"utf8")}catch{process.exit(0)}
               if(key) s=s.split(key).join("***");
-              s=s.replace(/sk-(plus|std|slm)-[A-Za-z0-9_-]{4,}/g,"sk-$1-***")
-                 .replace(/eyJ[A-Za-z0-9_-]{10,}/g,"eyJ***");
+              // Kept in sync with .gitleaks.toml and packages/cli/lib/key.js.
+              // Adding a key tier means editing all three.
+              s=s.replace(/sk-(plus|std|slm|maestro)-[A-Za-z0-9_-]{4,}/g,"sk-$1-***")
+                 .replace(/eyJ[A-Za-z0-9_-]{10,}/g,"eyJ***")
+                 // Harnesses write the key into their own config under a
+                 // variable name. Masking the bare key shape is not enough if
+                 // the file records `ANTHROPIC_AUTH_TOKEN=<something else>`.
+                 .replace(/((?:ANTHROPIC_(?:AUTH_TOKEN|API_KEY)|OPENAI_API_KEY|NEOSMITH_[A-Z_]*(?:KEY|TOKEN|SECRET))["'\s]*[:=]\s*"?)[^"'\s,}]+/g,"$1***");
               fs.writeFileSync(f,s);
             ' "$f" "$KEY"
           done
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: e2e-${{ matrix.os }}

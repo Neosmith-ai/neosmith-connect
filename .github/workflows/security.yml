@@ -1,0 +1,235 @@
+# Security gates for every pull request.
+#
+# This workflow deliberately takes NO SECRETS. That is what lets it run in full
+# on a pull request from a fork — which, per GOVERNANCE.md, is how every outside
+# contribution arrives. A gate that silently skips for the contributors you
+# trust least is not a gate.
+#
+# What is NOT here, because it already exists elsewhere:
+#
+#   CodeQL          · enabled as GitHub "default setup" on this repo, scanning
+#                     javascript-typescript. Adding a codeql.yml here would
+#                     CONFLICT with default setup, not supplement it. It has
+#                     already caught two js/clear-text-logging bugs in
+#                     packages/cli/lib/ui.js.
+#   Secret scanning · GitHub's own scanner plus PUSH PROTECTION is on, so a
+#                     recognised credential is blocked at `git push` time,
+#                     before CI ever sees it. The jobs below are the second
+#                     layer: they catch what GitHub's partner patterns do not
+#                     know about (NeoSmith's own sk-* shapes) and what push
+#                     protection cannot reach (history rewritten around it).
+#
+# Correctness of the CLI is test.yml's job. This file only asks: is anything
+# here dangerous?
+
+name: security
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    # Mondays 04:17 UTC. Off the hour on purpose — GitHub queues scheduled runs
+    # from the whole platform at :00, and they can be delayed by many minutes.
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+# Read-only by default. Jobs that need more say so themselves.
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── secret detection · broad ───────────────────────────────────────────────
+  # TruffleHog knows several hundred credential formats and, uniquely, can
+  # VERIFY many of them by calling the issuing API. A verified finding is a live
+  # credential, not a false positive, and is worth failing a build over.
+  trufflehog:
+    name: secret scan (trufflehog)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+          # Both scan modes below need real history: the diff scan to resolve
+          # the base commit, the full scan for obvious reasons.
+          fetch-depth: 0
+
+      # On a pull request, scan only what the pull request adds. Scanning the
+      # whole history here would fail every PR over a finding the author did not
+      # introduce and cannot fix — the fastest way to teach people to ignore a
+      # red check.
+      - name: Scan the pull request diff
+        if: github.event_name == 'pull_request'
+        uses: trufflesecurity/trufflehog@20652fbbdefffcdaa493a5bf57ab2ac6b1db715b # v3.97.1
+        with:
+          path: ./
+          base: ${{ github.event.pull_request.base.sha }}
+          head: ${{ github.event.pull_request.head.sha }}
+          extra_args: --results=verified,unknown
+
+      # On main and on the weekly run, scan everything. This is the mode that
+      # finds a key committed in 2026-08 and force-pushed over — the case push
+      # protection structurally cannot catch.
+      - name: Scan the full history
+        if: github.event_name != 'pull_request'
+        uses: trufflesecurity/trufflehog@20652fbbdefffcdaa493a5bf57ab2ac6b1db715b # v3.97.1
+        with:
+          path: ./
+          extra_args: --results=verified,unknown
+
+  # ── secret detection · NeoSmith-specific ───────────────────────────────────
+  # GitHub's scanner has no idea what `sk-plus-…` is, because nobody has
+  # registered it as a partner pattern. .gitleaks.toml describes the key shapes
+  # THIS product mints, kept in sync with packages/cli/lib/key.js.
+  gitleaks:
+    name: secret scan (gitleaks · NeoSmith key shapes)
+    runs-on: ubuntu-latest
+    env:
+      # The gitleaks GitHub Action requires a paid GITLEAKS_LICENSE for
+      # organization-owned repos. The binary itself is MIT and has no such
+      # restriction, so we fetch a pinned release and run it directly.
+      GITLEAKS_VERSION: "8.30.1"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Install gitleaks
+        run: |
+          set -euo pipefail
+          url="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl --fail --silent --show-error --location "$url" -o /tmp/gitleaks.tgz
+          tar -xzf /tmp/gitleaks.tgz -C /tmp gitleaks
+          sudo install -m 0755 /tmp/gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+
+      # --redact means a finding is reported by rule, file and line, but the
+      # matched secret is never printed into a public log. Without it, a scanner
+      # that finds a leaked key publishes it a second time.
+      - name: Scan git history
+        run: |
+          gitleaks git . \
+            --config .gitleaks.toml \
+            --redact \
+            --verbose \
+            --exit-code 1
+
+      # The working tree can hold a secret that is not committed yet — a real
+      # config file staged by mistake. `dir` scans files rather than commits.
+      - name: Scan the working tree
+        run: |
+          gitleaks dir . \
+            --config .gitleaks.toml \
+            --redact \
+            --verbose \
+            --exit-code 1
+
+  # ── dependency review ──────────────────────────────────────────────────────
+  # packages/cli ships exactly two runtime dependencies (smol-toml, yaml) to
+  # every user. Anything added to that list is a supply-chain decision.
+  dependency-review:
+    name: dependency review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
+        with:
+          fail-on-severity: high
+          # Copyleft licences would make the MIT licence on the published
+          # package a lie. Fail loudly rather than ship an incompatible tree.
+          deny-licenses: GPL-2.0, GPL-3.0, AGPL-1.0, AGPL-3.0, SSPL-1.0
+          # …with one exception. This action reviews GitHub Actions as
+          # dependencies too, and TruffleHog OSS is AGPL-3.0. A CI tool that
+          # merely RUNS against the source is not linked into the published
+          # package and does not reach a user's machine — the deny list above
+          # exists to protect what ships to npm, not to pick our scanners. Left
+          # unlisted, the gate would reject its own sibling job.
+          allow-dependencies-licenses: pkg:githubactions/trufflesecurity/trufflehog
+          comment-summary-in-pr: on-failure
+
+  # ── known vulnerabilities in the shipped tree ──────────────────────────────
+  npm-audit:
+    name: npm audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "20"
+
+      # The published package. `--omit=dev` is the point: these are the
+      # dependencies that reach a user's machine.
+      - name: Audit the published package
+        working-directory: packages/cli
+        run: |
+          npm install --omit=dev --no-fund --no-audit
+          npm audit --omit=dev --audit-level=high
+
+      # The workspace root has no runtime dependencies today, but it does have a
+      # lockfile, and a lockfile is a thing advisories attach to.
+      - name: Audit the workspace root
+        run: npm audit --audit-level=high
+
+  # ── the workflows themselves ───────────────────────────────────────────────
+  # GitHub Actions has its own vulnerability classes that no source-code linter
+  # looks for: expression injection into a `run:` block, pull_request_target
+  # used with a PR-head checkout, over-broad GITHUB_TOKEN permissions,
+  # artifact poisoning between jobs. e2e-staging.yml handles real credentials on
+  # a pull_request trigger, which is exactly the shape of workflow that gets
+  # this wrong. So it gets linted.
+  workflow-lint:
+    name: workflow security lint
+    runs-on: ubuntu-latest
+    env:
+      ACTIONLINT_VERSION: "1.7.12"
+      ZIZMOR_VERSION: "1.29.0"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Install actionlint
+        run: |
+          set -euo pipefail
+          url="https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          curl --fail --silent --show-error --location "$url" -o /tmp/actionlint.tgz
+          tar -xzf /tmp/actionlint.tgz -C /tmp actionlint
+          sudo install -m 0755 /tmp/actionlint /usr/local/bin/actionlint
+          actionlint --version
+
+      # Syntax, expression typing, shellcheck over every `run:` block.
+      #
+      # --severity=warning suppresses shellcheck's `info` notes. Those are
+      # style opinions, and two of them are wrong about this repo specifically:
+      # SC2016 fires on every `node -e '...'` block, where single quotes are
+      # exactly right because the shell must NOT expand what Node is about to
+      # parse. A gate that is noisy on correct code teaches people to ignore it.
+      # Warnings and errors — the ones that indicate an actual bug — still fail.
+      - name: actionlint
+        env:
+          SHELLCHECK_OPTS: --severity=warning
+        run: actionlint -color
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+
+      - name: Install zizmor
+        run: pip install --disable-pip-version-check "zizmor==${ZIZMOR_VERSION}"
+
+      # The `regular` persona reports findings that represent a real weakness.
+      # `pedantic` additionally reports every unpinned first-party action, which
+      # would fail on `actions/checkout@v4` everywhere — a change worth making
+      # deliberately, not one to be nagged into by a gate. Tracked separately.
+      - name: zizmor
+        run: zizmor --persona=regular --min-severity=medium .github/workflows/

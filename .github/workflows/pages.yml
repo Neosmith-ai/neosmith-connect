@@ -15,10 +15,12 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Read-only at the workflow level. `pages: write` and `id-token: write` are
+# granted only to the `deploy` job that actually needs them — the `build` job
+# runs `bundle exec jekyll build` over repository content and has no business
+# holding a token that can publish a site.
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 # Two concurrent runs against main can race the Pages deploy; let the
 # second one queue.
@@ -30,12 +32,14 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       # The manifest-driven blocks must match the manifest. Drift means
       # harnesses.json changed and generate-docs.js was not re-run; fail
       # before building rather than publishing a stale table.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with: { node-version: "20" }
       - name: Verify manifest-driven docs match the manifest
         # generate-docs.js owns five blocks under site/docs/ — the landing-page
@@ -44,7 +48,12 @@ jobs:
         # generator was not re-run.
         run: node scripts/generate-docs.js --check
 
-      - uses: ruby/setup-ruby@v1
+      # Pinned by commit SHA, not by tag. `@v1` is a moving pointer the upstream
+      # maintainer can repoint at any time; the only third-party action in this
+      # repo is the one worth pinning hardest. Dependabot bumps it (see
+      # .github/dependabot.yml) and the bump goes through review like any other
+      # change.
+      - uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1.321.0
         with:
           # Ruby 3.1 — the github-pages gem pins Jekyll 3.x which is
           # incompatible with Ruby 3.2+. GitHub Pages itself runs 3.1.
@@ -56,13 +65,17 @@ jobs:
         working-directory: site/docs
         run: bundle exec jekyll build --destination ../../_site
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
         with:
           path: _site
 
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     # Exposed so verify-published can ask the URL this run actually deployed to,
     # rather than a hardcoded guess that goes stale if the repo is ever renamed.
     outputs:
@@ -72,7 +85,7 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
 
   # Everything above inspects the REPOSITORY. None of it proves a page came out
   # the other end — which is why two harness pages could 404 on the live guide
@@ -81,8 +94,10 @@ jobs:
     needs: deploy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with: { node-version: "20" }
       - name: Every manifest harness has a live page
         # Pages serves from a CDN, so a fresh deploy can take a moment to

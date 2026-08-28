@@ -3,3 +3,9 @@ contact_links:
   - name: Neosmith Developer Guide
     url: https://neosmith-ai.github.io/neosmith-connect/
     about: Setup docs, IDE integrations, agent configuration
+  - name: Report a security vulnerability (private)
+    url: https://github.com/Neosmith-ai/neosmith-connect/security/advisories/new
+    about: Never file a security bug as a public issue. This opens a private advisory only maintainers can see. See SECURITY.md.
+  - name: How to contribute
+    url: https://github.com/Neosmith-ai/neosmith-connect/blob/main/CONTRIBUTING.md#how-to-contribute
+    about: Fork, branch, pull request — plus what CI runs and what a reviewer looks for.

@@ -1,0 +1,78 @@
+# OpenSSF Scorecard — continuous grading of this repository's security posture.
+#
+# The other gates in this repo ask "is this change safe?". Scorecard asks a
+# different question: "is the project still configured the way we set it up?"
+#
+# That distinction matters here. Everything that made this repo risky before
+# August 2026 was a SETTING, not a commit: main had no protection, all four
+# collaborators were admins, a staging key was reachable from a pull request,
+# and any tag push could publish to npm. No code review would have caught any of
+# it, because none of it was code. Scorecard checks exactly that class:
+#
+#   Branch-Protection        · is main still protected?
+#   Token-Permissions        · did a workflow quietly gain write scope?
+#   Dangerous-Workflow       · did someone add pull_request_target + PR checkout?
+#   Pinned-Dependencies      · are third-party actions still pinned by SHA?
+#   Dependency-Update-Tool   · is Dependabot still on?
+#   Signed-Releases          · does the npm package still ship provenance?
+#
+# Results land in the Security tab as code-scanning alerts, so a regression
+# shows up the same way a CodeQL finding does, and a score drop is visible on
+# the README badge.
+
+name: scorecard
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    # Weekly, Monday 05:23 UTC — after the security workflow's 04:17 slot so the
+    # two do not contend for runners.
+    - cron: "23 5 * * 1"
+  workflow_dispatch:
+
+permissions: read-all
+
+concurrency:
+  group: scorecard
+  cancel-in-progress: false
+
+jobs:
+  analysis:
+    name: scorecard analysis
+    runs-on: ubuntu-latest
+    permissions:
+      # Upload the SARIF result to the Security tab.
+      security-events: write
+      # Scorecard uses the OIDC token to publish to the public
+      # deps.dev / Scorecard API, which is what backs the README badge.
+      id-token: write
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Run analysis
+        uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          # Publishing makes the score public and enables the README badge.
+          # This repo is public already, so nothing is disclosed that a reader
+          # could not determine by inspection.
+          publish_results: true
+
+      # Kept for 5 days so a maintainer can diff two runs when a score moves and
+      # the Security tab does not make the reason obvious.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: scorecard-results
+          path: results.sarif
+          retention-days: 5
+
+      - name: Upload to code scanning
+        uses: github/codeql-action/upload-sarif@486fec2a3ea2626afcd8c7e9208b4f515078dd7e # codeql-bundle-v2.26.4
+        with:
+          sarif_file: results.sarif
