@@ -91,12 +91,29 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       healthy: ${{ steps.check.outputs.healthy }}
-    # Same-repo only. A fork PR skips this job, so `healthy` is empty, so every
-    # downstream job is skipped too — the fork never reaches the environment
-    # gate, let alone the secret behind it.
+    # Two exclusions, both of which skip this job — and because every downstream
+    # job is gated on `healthy`, skipping here skips the whole chain.
+    #
+    #   1. FORK PRs. A fork never receives secrets, so it could only ever reach
+    #      the key check and fail. It also must never reach the environment.
+    #
+    #   2. DEPENDABOT PRs. This one is not obvious and cost us four red runs on
+    #      2026-08-28, the day Dependabot was switched on. A Dependabot branch
+    #      lives in THIS repository, so the same-repo test above passes — but
+    #      GitHub deliberately withholds Actions secrets from Dependabot-
+    #      triggered runs (they read from a separate "Dependabot secrets" store,
+    #      which is empty here). So `secrets.NEOSMITH_STAGING_KEY` arrives empty,
+    #      the run burns a maintainer's approval on the environment gate, and
+    #      then fails on something no reviewer of a dependency bump can fix.
+    #
+    #      A dependency bump also has nothing to say about real-harness
+    #      behaviour: test.yml already runs the full contract matrix and the
+    #      offline e2e on these PRs, which is the signal that actually matters
+    #      for "did bumping smol-toml break anything".
     if: >-
-      github.event_name != 'pull_request' ||
-      github.event.pull_request.head.repo.full_name == github.repository
+      github.actor != 'dependabot[bot]' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
