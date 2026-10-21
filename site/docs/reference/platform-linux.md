@@ -62,7 +62,8 @@ ANTHROPIC_API_KEY=sk-plus-yourname-xxxxxx
 ## One-command Claude Code setup
 
 ```bash
-npx @neosmithai/cli init sk-plus-yourname-xxxxxx
+npm install -g @neosmithai/cli   # once; needs Node.js 18+
+neosmith init sk-plus-yourname-xxxxxx
 ```
 
 This writes `~/.claude/settings.json`, independent of shell profiles.

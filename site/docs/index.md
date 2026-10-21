@@ -32,11 +32,11 @@ The rest of this page is a **developer-at-the-terminal walkthrough**: what to ty
 
 You'll need three things:
 
-1. **Node.js 18 or newer** on your machine (`node --version` should print `v18` or higher).
+1. **Node.js 18 or newer** on your machine (`node --version` should print `v18` or higher). `npm` comes with Node — there's nothing extra to install. No Node yet? Windows: `winget install OpenJS.NodeJS.LTS`; macOS: `brew install node`; everywhere else: <https://nodejs.org/>.
 2. **A NeoSmith API key** — `sk-plus-…` (Pro, Opus-tier), `sk-std-…` (Basic, Sonnet-tier), or `sk-slm-…` (Lite, SLM-only). Get one from your team lead or email [contact-us@neosmith.ai](mailto:contact-us@neosmith.ai).
 3. **At least one AI coding tool already installed** — Claude Code, Codex, Continue, Cline, JetBrains AI, Copilot Chat, Zed, Cursor, OpenCode, OpenClaw, or Junie CLI. (NeoSmith works alongside the tool you already use; it doesn't replace any of them.)
 
-Supported platforms: macOS, Linux, Windows (use **Git Bash** for the installer — see the [Windows note](#windows-note)).
+Supported platforms: macOS, Linux, Windows (PowerShell, Git Bash or WSL2 — see the [Windows note](#windows-note)).
 
 ---
 
@@ -44,11 +44,29 @@ Supported platforms: macOS, Linux, Windows (use **Git Bash** for the installer �
 
 ### Step 1 — Install the CLI
 
+**Recommended — npm**, the same command on macOS, Linux and Windows:
+
 ```bash
+npm install -g @neosmithai/cli
+```
+
+The `-g` matters: without it npm installs into the current folder and `neosmith` stays `command not found`.
+
+> **Why not `npx @neosmithai/cli setup`?** npx runs a throwaway copy and installs nothing, so afterwards `neosmith` is still "not recognized". Fine for a one-off try; for everything after (`status`, `off`, `update`, `doctor`) you want the npm install.
+
+**No Node yet?** The installer fetches the CLI for you. On Windows PowerShell it also installs Node via `winget` if it's missing:
+
+```bash
+# macOS / Linux / WSL2 / Git Bash
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/Neosmith-ai/neosmith-connect/main/packages/cli/install.sh)"
 ```
 
-**What you should see** (≈10 seconds):
+```powershell
+# Windows PowerShell
+irm https://raw.githubusercontent.com/Neosmith-ai/neosmith-connect/main/packages/cli/install.ps1 | iex
+```
+
+**What the installer prints** (≈10 seconds):
 
 ```
   NeoSmith CLI installer
@@ -64,9 +82,9 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/Neosmith-ai/neosmith-con
     3. neosmith claude status    # confirm it's connected
 ```
 
-If the installer prints any line starting with **`Node.js 18+ is required`**, install Node first (Homebrew on macOS: `brew install node`; everywhere else: <https://nodejs.org/>).
+If the installer prints any line starting with **`Node.js 18+ is required`**, install Node first (Homebrew on macOS: `brew install node`; Windows: `winget install OpenJS.NodeJS.LTS`; everywhere else: <https://nodejs.org/>).
 
-Once the installer finishes, open a **new terminal** so the `PATH` change takes effect, then:
+Once the install finishes, open a **new terminal** so the `PATH` change takes effect, then:
 
 ```bash
 neosmith help
@@ -384,9 +402,19 @@ which neosmith                                   # where it's looking
 
 If `which neosmith` returns nothing, your `$HOME` differs between shells. Set `$HOME` consistently or symlink `~/.local/bin/neosmith` into a directory already on your path.
 
+### `neosmith` isn't recognized after `npx @neosmithai/cli setup`
+
+Expected — `npx` runs a temporary copy and installs no command. Your key and harness config are already saved. Install the command once:
+
+```bash
+npm install -g @neosmithai/cli
+```
+
+then open a new terminal and run `neosmith --version`.
+
 ### The installer says `Node.js 18+ is required`
 
-Install Node first (Homebrew on macOS: `brew install node`; everywhere else: <https://nodejs.org/>), then re-run the installer.
+Install Node first (Homebrew on macOS: `brew install node`; Windows: `winget install OpenJS.NodeJS.LTS`; everywhere else: <https://nodejs.org/>), then re-run the installer.
 
 ### `npm error 403 403 Forbidden` during publish / internal
 
@@ -408,9 +436,15 @@ If `doctor` still doesn't tell you what's wrong, file an issue with the **all th
 
 ## Windows note
 
-The curl-pipe-bash approach doesn't work cleanly in PowerShell because of line-ending issues. Two paths that work:
+`npm install -g @neosmithai/cli` works as-is in PowerShell and Command Prompt — that's the recommended path. If you don't have Node, the native PowerShell installer gets it for you:
 
-**Git Bash (recommended):**
+```powershell
+irm https://raw.githubusercontent.com/Neosmith-ai/neosmith-connect/main/packages/cli/install.ps1 | iex
+```
+
+The curl-pipe-bash one-liner doesn't work cleanly in PowerShell because of line-ending issues. If you'd rather use bash, two paths work:
+
+**Git Bash:**
 
 ```bash
 bash -c "curl -fsSL https://raw.githubusercontent.com/Neosmith-ai/neosmith-connect/main/packages/cli/install.sh | bash"

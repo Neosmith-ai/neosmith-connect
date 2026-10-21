@@ -10,17 +10,20 @@ NeoSmith routes cheap traffic to a distilled SLM and escalates to Claude Opus on
 
 ## Quick start
 
-**1. Install** — use the command for your OS from the root
-[`README.md`](https://github.com/Neosmith-ai/neosmith-connect#install-paths)
-(both the bash and the PowerShell installer are shipped; they're the only
-authoritative source for install commands — this README points instead of
-duplicating, which is how it drifted before).
-
-Or, if you already have Node 18+, install straight from npm:
+**1. Install** — the recommended path is npm. It needs Node.js 18+, which
+brings `npm` with it (`node --version` to check; Windows:
+`winget install OpenJS.NodeJS.LTS`, macOS: `brew install node`, everywhere else:
+<https://nodejs.org/>):
 
 ```bash
 npm install -g @neosmithai/cli
 ```
+
+No Node and don't want to install it yourself? Use the bash or PowerShell
+installer from the root
+[`README.md`](https://github.com/Neosmith-ai/neosmith-connect#install-paths)
+(the authoritative source for the installer one-liners — this README points
+instead of duplicating, which is how it drifted before).
 
 > **The `-g` is load-bearing.** Without it npm does a *local* install into
 > whatever directory you are standing in — it creates a `package.json` and
@@ -34,7 +37,12 @@ To try it once without installing anything:
 npx @neosmithai/cli login sk-plus-yourname-xxxxxx
 ```
 
-**What you should see** (≈10 seconds):
+> **npx installs nothing.** It runs a throwaway copy, so afterwards `neosmith`
+> is still `not recognized` / `command not found`. Your key and harness config
+> are saved either way — run `npm install -g @neosmithai/cli` to get the
+> command for everything after that.
+
+**What you should see from the installer** (≈10 seconds):
 
 ```
   NeoSmith CLI installer
@@ -527,6 +535,17 @@ Run `neosmith doctor` first — it gives one sentence per failed harness explain
 | macOS GUI app doesn't see the env vars | GUI apps read `~/.zprofile` (or `~/.zshenv`), not `~/.zshrc`. Launch the IDE from a terminal, or put the `export OPENAI_API_KEY=…` line in `~/.zprofile`. |
 | Something else | `neosmith status` shows every harness's state + whether a key is stored; `neosmith doctor` round-trips each connected one. |
 
+### `neosmith` isn't recognized after `npx @neosmithai/cli setup`
+
+That's expected: `npx` runs a temporary copy and installs no command. Setup
+still saved your key (`~/.neosmith/config.json`) and any harness config it
+wrote. Install the command once and carry on:
+
+```bash
+npm install -g @neosmithai/cli
+neosmith --version      # open a new terminal first if it isn't found
+```
+
 ### `neosmith` isn't recognized after `npm install`
 
 You left off the `-g`:
@@ -582,12 +601,13 @@ The root `README.md` lists the native PowerShell installer (`irm … | iex`) as 
 ## Upgrade and uninstall
 
 ```bash
-# Upgrade — re-run the installer for your OS (see root README → Install paths).
-# The installers are idempotent: they re-download a fresh tarball/zip and
-# safely replace the CLI in place (~/.neosmith/cli), preserving your key.
+# Upgrade — works for either install route and keeps your key:
+neosmith update
 
-# Or, if you installed via npx, just bump to latest:
-npx @neosmithai/cli@latest login
+# By hand: npm install →
+npm install -g @neosmithai/cli@latest
+# installer → re-run it (see root README → Install paths); it replaces
+# ~/.neosmith/cli in place.
 
 # Uninstall — disconnect every harness, remove ~/.neosmith (+ launcher with --all):
 neosmith uninstall --all

@@ -18,7 +18,8 @@ This guide covers running NeoSmith on **native Windows** (PowerShell, no WSL). I
 In **PowerShell**:
 
 ```powershell
-npx @neosmithai/cli init sk-plus-yourname-xxxxxx
+npm install -g @neosmithai/cli   # once; needs Node.js 18+
+neosmith init sk-plus-yourname-xxxxxx
 ```
 
 This writes `%USERPROFILE%\.claude\settings.json`. Open a new Claude Code session.

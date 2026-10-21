@@ -20,14 +20,15 @@ Claude Code is Anthropic's CLI/IDE agent. It speaks the Anthropic Messages API a
 The NeoSmith CLI configures Claude Code for you and runs a live connection check.
 
 ```bash
-npx @neosmithai/cli init sk-plus-yourname-xxxxxx
+npm install -g @neosmithai/cli   # once; needs Node.js 18+
+neosmith init sk-plus-yourname-xxxxxx
 ```
 
 This writes the right env keys into `~/.claude/settings.json` and verifies against `/whoami`. Open a **new** Claude Code session — done.
 
 > **Accepted key formats:** NeoSmith issues keys as `sk-plus-*` (Pro / Opus-tier), `sk-slm-*` (Lite / SLM-only), and `sk-std-*` (Basic / Sonnet-tier), plus a Cognito JWT (starts with `eyJ`) for SSO. The CLI does not gate on prefix — whatever value you paste is stored and round-tripped against `/whoami`, which is the server-side source of truth for key validity (a `401` or `403` response means the key wasn't accepted).
 
-> **Interactive mode:** run `npx @neosmithai/cli init` with **no key** and it prompts you to paste one securely instead of putting it in your shell history.
+> **Interactive mode:** run `neosmith init` with **no key** and it prompts you to paste one securely instead of putting it in your shell history.
 
 What `init` does, in order:
 1. Round-trips the key against `https://router.neosmith.ai/whoami` for server-side validation (the router is the authoritative validator — the CLI does not inspect the prefix).
@@ -100,13 +101,13 @@ up the change. `neosmith claude status` reports which editors are wired.
 To check your installed key any time:
 
 ```bash
-npx @neosmithai/cli verify
+neosmith verify
 ```
 
 To revert to Anthropic-direct (restores your pre-NeoSmith config from the backup if present):
 
 ```bash
-npx @neosmithai/cli uninstall
+neosmith uninstall
 ```
 
 ---
