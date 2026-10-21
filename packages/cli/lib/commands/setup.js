@@ -20,6 +20,7 @@ const harness = require("../harness");
 const io = require("../io");
 const ui = require("../ui");
 const key = require("../key");
+const invocation = require("../invocation");
 
 // Heuristic: is this tool likely installed on this machine?
 // Two strategies: (1) configFile parent dir exists; (2) fallback paths beyond
@@ -133,17 +134,31 @@ function parseFlags(args) {
 async function pickInstalled(flags) {
   const manifest = harness.manifest();
   const candidates = manifest.harnesses.filter(isInstalled);
-  if (candidates.length === 0) return [];
-  if (flags.harness) return candidates.filter((c) => c.id === flags.harness);
-  if (flags.nonInteractive || flags.all) return candidates;
-  if (!ui.isTTY) return candidates; // non-TTY: wire everything detected
+  // `detected` lets the caller tell "nothing installed" from "you said no to
+  // everything" — they need different advice.
+  const detected = candidates.length;
+  if (detected === 0) return { picks: [], detected };
+  if (flags.harness) return { picks: candidates.filter((c) => c.id === flags.harness), detected };
+  if (flags.nonInteractive || flags.all) return { picks: candidates, detected };
+  if (!ui.isTTY) return { picks: candidates, detected }; // non-TTY: wire everything detected
   // Interactive checklist.
   const chosen = [];
   for (const c of candidates) {
     const ok = await ui.confirm(`Wire ${c.name} to NeoSmith?`);
     if (ok) chosen.push(c);
   }
-  return chosen;
+  return { picks: chosen, detected };
+}
+
+// Under npx nothing was installed, so the `neosmith` command the rest of the
+// docs use does not exist yet. Say so once, at the end, where it is seen.
+function npxNotice() {
+  if (!invocation.viaNpx()) return;
+  ui.log("");
+  // stdout like the two lines under it, so a redirected log keeps them together.
+  ui.log(ui.c("yellow", "! ") + "You ran setup through npx, which doesn't install the `neosmith` command.");
+  ui.log(`  Install it once:  ${ui.c("bold", invocation.INSTALL_CMD)}`);
+  ui.log(ui.c("dim", "  then open a new terminal. Your key and settings are already saved."));
 }
 
 async function run(args) {
@@ -158,10 +173,11 @@ async function run(args) {
   }
 
   // Step 2 — pick harnesses.
-  const picks = await pickInstalled(flags);
+  const { picks, detected } = await pickInstalled(flags);
   if (picks.length === 0) {
     if (flags.harness) ui.warn(`Harness ${flags.harness} doesn't appear to be installed.`);
-    else ui.warn("No installed harnesses detected. Run `neosmith claude on` to wire Claude Code directly.");
+    else if (detected > 0) ui.warn(`No harnesses selected. Run \`${invocation.cmd("claude on")}\` (or another tool) whenever you're ready.`);
+    else ui.warn(`No installed harnesses detected. Run \`${invocation.cmd("claude on")}\` to wire Claude Code directly.`);
   } else {
     ui.log(ui.c("dim", `Wiring ${picks.length} harness(es): ${picks.map((p) => p.id).join(", ")}`));
     for (const p of picks) {
@@ -196,6 +212,7 @@ async function run(args) {
     // to bubble. Print suggestion but don't override doctor's exit code.
     ui.warn(`Doctor errored: ${e.message}`);
   }
+  npxNotice();
 }
 
 // harnessInstallPaths / isInstalled are exported for the contract suite. The

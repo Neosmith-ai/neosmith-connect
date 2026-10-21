@@ -75,7 +75,8 @@ curl -s https://router.neosmith.ai/whoami -H "Authorization: Bearer sk-plus-your
 ## 4. One-command Claude Code setup (inside WSL)
 
 ```bash
-npx @neosmithai/cli init sk-plus-yourname-xxxxxx
+npm install -g @neosmithai/cli   # once; needs Node.js 18+
+neosmith init sk-plus-yourname-xxxxxx
 ```
 
 ---

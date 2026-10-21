@@ -21,7 +21,8 @@ Cursor is a VS Code fork with strong native BYOM support. You have two paths:
 Cursor inherits VS Code's extension ecosystem, so the Claude Code extension works:
 
 ```bash
-npx @neosmithai/cli init sk-plus-yourname-xxxxxx
+npm install -g @neosmithai/cli   # once; needs Node.js 18+
+neosmith init sk-plus-yourname-xxxxxx
 ```
 
 (or `neosmith claude on` if you're already logged in)

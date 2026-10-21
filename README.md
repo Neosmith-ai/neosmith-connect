@@ -115,6 +115,27 @@ removes the gate). CI always runs it regardless, so nothing untested reaches `ma
 
 ## Install paths
 
+**Recommended — npm (any OS).** Needs Node.js 18+, which brings `npm` with it
+(`node --version` to check; get it with `winget install OpenJS.NodeJS.LTS` on
+Windows, `brew install node` on macOS, or <https://nodejs.org/>):
+
+```bash
+npm install -g @neosmithai/cli
+neosmith setup
+```
+
+The `-g` matters: without it nothing lands on your `PATH`. Open a new terminal
+if `neosmith` isn't found straight away.
+
+> `npx @neosmithai/cli setup` also works for a one-off run, but it installs
+> nothing — afterwards `neosmith` is still "not recognized". Use the npm
+> install above if you'll run the CLI again (you will: `status`, `off`,
+> `update`, `doctor`).
+
+**No Node yet?** The installers below fetch the CLI for you. The PowerShell one
+also installs Node through `winget` when it's missing; the bash one asks you to
+install Node first.
+
 - macOS / Linux / WSL2:
 
   ```bash

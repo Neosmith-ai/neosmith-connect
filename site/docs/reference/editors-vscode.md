@@ -31,7 +31,8 @@ export ANTHROPIC_API_KEY=sk-plus-yourname-xxxxxx
 Or use the one-command CLI:
 
 ```bash
-npx @neosmithai/cli init sk-plus-yourname-xxxxxx
+npm install -g @neosmithai/cli   # once; needs Node.js 18+
+neosmith init sk-plus-yourname-xxxxxx
 ```
 
 ### 2. Install the extension

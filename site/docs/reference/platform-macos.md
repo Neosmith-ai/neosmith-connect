@@ -52,7 +52,8 @@ echo $ANTHROPIC_BASE_URL      # → https://router.neosmith.ai
 The NeoSmith CLI writes config into `~/.claude/settings.json` (independent of shell profiles, so it works for Dock-launched apps too):
 
 ```bash
-npx @neosmithai/cli init sk-plus-yourname-xxxxxx
+npm install -g @neosmithai/cli   # once; needs Node.js 18+
+neosmith init sk-plus-yourname-xxxxxx
 ```
 
 ## Launching IDEs so they see env vars
